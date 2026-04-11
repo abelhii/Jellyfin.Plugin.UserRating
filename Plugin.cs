@@ -29,12 +29,12 @@ namespace Jellyfin.Plugin.UserRatings
             if (!string.IsNullOrWhiteSpace(applicationPaths.WebPath))
             {
                 var indexFile = Path.Combine(applicationPaths.WebPath, "index.html");
-                if (!File.Exists(indexFile))
+                if (File.Exists(indexFile))
                 {
                     string indexContents = File.ReadAllText(indexFile);
 
-                    // Scripts to inject in order (modules must load before main.js)
-                    string scriptReplace = "<script plugin=\"UserRatings\".*?</script>";
+                    // Regex to remove old scripts - catch both script tags and link tags with plugin="UserRatings"
+                    string scriptReplace = "<(script|link)[^>]*plugin=\"UserRatings\"[^>]*>(?:</script>)?";
                     string[] scripts = new[]
                     {
                         "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=api.js\"></script>",
@@ -61,8 +61,10 @@ namespace Jellyfin.Plugin.UserRatings
                     {
                         _logger.LogInformation("Injecting User Ratings plugin into {indexFile}", indexFile);
 
-                        // Remove old scripts
+                        // Remove old scripts (both old ratings.js and new plugin format)
                         indexContents = Regex.Replace(indexContents, scriptReplace, "", RegexOptions.Singleline);
+                        // Also explicitly remove ratings.js if it exists with any format
+                        indexContents = Regex.Replace(indexContents, "<script[^>]*ratings\\.js[^>]*>(?:</script>)?", "", RegexOptions.Singleline);
 
                         // Insert scripts before closing body tag
                         int bodyClosing = indexContents.LastIndexOf("</body>");
