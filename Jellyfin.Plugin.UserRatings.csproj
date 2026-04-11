@@ -16,8 +16,20 @@
 
   <ItemGroup>
     <None Remove="Configuration\configPage.html" />
+    <None Remove="Configuration\api.js" />
+    <None Remove="Configuration\ui.js" />
+    <None Remove="Configuration\container-detector.js" />
+    <None Remove="Configuration\detail-page-injector.js" />
+    <None Remove="Configuration\home-page-ratings.js" />
+    <None Remove="Configuration\styles.css" />
     <None Remove="Configuration\main.js" />
     <EmbeddedResource Include="Configuration\configPage.html" />
+    <EmbeddedResource Include="Configuration\api.js" />
+    <EmbeddedResource Include="Configuration\ui.js" />
+    <EmbeddedResource Include="Configuration\container-detector.js" />
+    <EmbeddedResource Include="Configuration\detail-page-injector.js" />
+    <EmbeddedResource Include="Configuration\home-page-ratings.js" />
+    <EmbeddedResource Include="Configuration\styles.css" />
     <EmbeddedResource Include="Configuration\main.js" />
   </ItemGroup>
 
