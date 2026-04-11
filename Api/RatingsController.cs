@@ -25,9 +25,9 @@ namespace Jellyfin.Plugin.UserRatings.Api
         {
             try
             {
-                if (rating < 1 || rating > 5)
+                if (rating < 1 || rating > 10)
                 {
-                    return BadRequest(new { success = false, message = "Rating must be between 1 and 5" });
+                    return BadRequest(new { success = false, message = "Rating must be between 1 and 10" });
                 }
 
                 var userRating = new UserRating

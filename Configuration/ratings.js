@@ -233,7 +233,7 @@
         container.className = 'star-rating';
         let currentSelectedRating = rating;
         
-        for (let i = 1; i <= 5; i++) {
+        for (let i = 1; i <= 10; i++) {
             const star = document.createElement('span');
             star.className = 'star' + (i <= rating ? ' filled' : '');
             star.textContent = '★';

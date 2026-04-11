@@ -114,7 +114,7 @@ namespace Jellyfin.Plugin.UserRatings.Data
             lock (_lock)
             {
                 var ratings = _ratings.Values.Where(r => r.ItemId == itemId).ToList();
-                
+
                 return new RatingStats
                 {
                     AverageRating = ratings.Any() ? ratings.Average(r => r.Rating) : 0,

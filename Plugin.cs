@@ -29,27 +29,27 @@ namespace Jellyfin.Plugin.UserRatings
             if (!string.IsNullOrWhiteSpace(applicationPaths.WebPath))
             {
                 var indexFile = Path.Combine(applicationPaths.WebPath, "index.html");
-                if (File.Exists(indexFile))
+                if (!File.Exists(indexFile))
                 {
                     string indexContents = File.ReadAllText(indexFile);
-                    
+
                     // Script to inject
                     string scriptReplace = "<script plugin=\"UserRatings\".*?</script>";
-                    string scriptElement = "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=ratings.js\"></script>";
-                    
+                    string scriptElement = "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=main.js\"></script>";
+
                     if (!indexContents.Contains(scriptElement))
                     {
                         _logger.LogInformation("Injecting User Ratings script into {indexFile}", indexFile);
-                        
+
                         // Remove old scripts
                         indexContents = Regex.Replace(indexContents, scriptReplace, "", RegexOptions.Singleline);
-                        
+
                         // Insert script before closing body tag
                         int bodyClosing = indexContents.LastIndexOf("</body>");
                         if (bodyClosing != -1)
                         {
                             indexContents = indexContents.Insert(bodyClosing, scriptElement);
-                            
+
                             try
                             {
                                 File.WriteAllText(indexFile, indexContents);
@@ -82,8 +82,8 @@ namespace Jellyfin.Plugin.UserRatings
                 },
                 new PluginPageInfo
                 {
-                    Name = "ratings.js",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.ratings.js"
+                    Name = "main.js",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.main.js"
                 }
             };
         }
