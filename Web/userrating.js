@@ -658,11 +658,20 @@
     const url = location.href;
     if (url !== lastUrl) {
       lastUrl = url;
+
       const oldUI = document.getElementById('user-ratings-ui');
       if (oldUI) oldUI.remove();
+
+      const ratingsTabContent = document.querySelector('#ratingsTab');
+      if (ratingsTabContent) {
+        ratingsTabContent.style.display = 'none';
+        ratingsTabContent.classList.add('hide');
+      }
+
       isInjecting = false;
       injectionAttempts = 0;
       currentItemId = null;
+
       setTimeout(injectRatingsUI, 150);
       return;
     }
@@ -766,9 +775,10 @@
       tabsSlider.querySelectorAll('.emby-tab-button:not([data-ratings-tab="true"])').forEach(tab => {
         tab.addEventListener('click', function () {
           const ratingsTabContent = document.querySelector('#ratingsTab');
-          if (ratingsTabContent) { ratingsTabContent.style.display = 'none'; ratingsTabContent.classList.add('hide'); }
-          const homePage = document.querySelector('[data-role="page"].hide:not(#ratingsTab)');
-          if (homePage) homePage.classList.remove('hide');
+          if (ratingsTabContent) {
+            ratingsTabContent.style.display = 'none';
+            ratingsTabContent.classList.add('hide');
+          }
         }, true);
       });
 
@@ -785,7 +795,7 @@
       if (!homePage) { console.error('[UserRatings] Could not find home page'); return; }
       ratingsTabContent = document.createElement('div');
       ratingsTabContent.id = 'ratingsTab';
-      ratingsTabContent.className = 'page homePage libraryPage hide';
+      ratingsTabContent.className = 'page libraryPage hide';
       ratingsTabContent.setAttribute('data-role', 'page');
       ratingsTabContent.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;overflow:auto;';
       homePage.parentNode.appendChild(ratingsTabContent);
@@ -852,7 +862,8 @@
                         <div class="cardBox cardBox-bottompadded">
                             <div class="cardScalable">
                                 <div class="cardPadder cardPadder-portrait"></div>
-                                <a href="#/details?id=${item.itemId}&serverId=${serverId}" data-action="link" class="cardImageContainer cardContent itemAction" aria-label="${title}" style="background-image:url('${imageUrl}');"></a>
+                                <canvas aria-hidden="true" width="20" height="20" class="blurhash-canvas lazy-hidden"></canvas>
+                                <a href="#/details?id=${item.itemId}&serverId=${serverId}" data-action="link" class="cardImageContainer coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast" aria-label="${title}" style="background-image:url('${imageUrl}');"></a>
                                 <div class="cardIndicators cardIndicators-bottomright">
                                     <div style="background:rgba(0,0,0,0.85);padding:0.4em 0.7em;border-radius:4px;display:inline-flex;align-items:center;gap:0.3em;">
                                         <span style="color:#ffd700;font-size:1.1em;">★</span>
