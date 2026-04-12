@@ -717,13 +717,7 @@
       } else {
         ratingsTab.style.display = 'none';
         ratingsTab.classList.add('hide');
-        const allPages = document.querySelectorAll('[data-role="page"]');
-        allPages.forEach(page => {
-          if (page.id === 'ratingsTab' || !page.classList.contains('homePage')) {
-            page.classList.add('hide');
-            page.style.display = 'none';
-          }
-        });
+        
         const homePage = document.querySelector('[data-role="page"].homePage:not(#ratingsTab)');
         if (homePage) {
           homePage.classList.remove('hide');
@@ -797,12 +791,19 @@
       ratingsTabContent.id = 'ratingsTab';
       ratingsTabContent.className = 'page libraryPage hide';
       ratingsTabContent.setAttribute('data-role', 'page');
-      ratingsTabContent.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;overflow:auto;';
+      ratingsTabContent.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--theme-body-bg);
+        z-index: 1000;
+        overflow: auto;
+      `;
       homePage.parentNode.appendChild(ratingsTabContent);
     }
 
-    const homePage = document.querySelector('[data-role="page"]:not(.hide):not(#ratingsTab)');
-    if (homePage) homePage.classList.add('hide');
     ratingsTabContent.classList.remove('hide');
     ratingsTabContent.style.display = 'block';
     ratingsTabContent.style.pointerEvents = 'auto';
