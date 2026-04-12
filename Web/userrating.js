@@ -717,7 +717,7 @@
       } else {
         ratingsTab.style.display = 'none';
         ratingsTab.classList.add('hide');
-        
+
         const homePage = document.querySelector('[data-role="page"].homePage:not(#ratingsTab)');
         if (homePage) {
           homePage.classList.remove('hide');
@@ -728,7 +728,7 @@
 
     isInjecting = false;
     injectionAttempts = 0;
-    currentItemId = null;
+    currentItemId = null; 865
     setTimeout(injectRatingsUI, 100);
     setTimeout(injectRatingsUI, 300);
   });
@@ -761,20 +761,33 @@
 
       ratingsTab.addEventListener('click', async function (e) {
         e.preventDefault();
-        tabsSlider.querySelectorAll('.emby-tab-button').forEach(tab => tab.classList.remove('emby-tab-button-active'));
+
+        // deactivate buttons
+        tabsSlider.querySelectorAll('.emby-tab-button')
+          .forEach(tab => tab.classList.remove('emby-tab-button-active'));
+
         ratingsTab.classList.add('emby-tab-button-active');
-        try { await displayRatingsList(); } catch (error) { console.error('[UserRatings] Error in displayRatingsList:', error); }
+
+        // deactivate all tab content
+        document.querySelectorAll('#indexPage .tabContent')
+          .forEach(tab => tab.classList.remove('is-active'));
+
+        // activate ratings tab
+        ratingsTabContent.classList.add('is-active');
+        ratingsTabContent.classList.remove('hide');
+
+        await displayRatingsList();
       });
 
-      tabsSlider.querySelectorAll('.emby-tab-button:not([data-ratings-tab="true"])').forEach(tab => {
-        tab.addEventListener('click', function () {
-          const ratingsTabContent = document.querySelector('#ratingsTab');
-          if (ratingsTabContent) {
-            ratingsTabContent.style.display = 'none';
-            ratingsTabContent.classList.add('hide');
-          }
-        }, true);
-      });
+      tabsSlider.querySelectorAll('.emby-tab-button:not([data-ratings-tab="true"])')
+        .forEach(tab => {
+          tab.addEventListener('click', function () {
+            if (ratingsTabContent) {
+              ratingsTabContent.classList.remove('is-active');
+              ratingsTabContent.classList.add('hide');
+            }
+          }, true);
+        });
 
       tabsSlider.appendChild(ratingsTab);
     } catch (error) {
@@ -783,25 +796,25 @@
   }
 
   async function displayRatingsList() {
+    const indexPage = document.querySelector('#indexPage');
+    if (!indexPage) {
+      console.error('[UserRatings] #indexPage not found');
+      return;
+    }
+
     let ratingsTabContent = document.querySelector('#ratingsTab');
+
     if (!ratingsTabContent) {
-      const homePage = document.querySelector('[data-role="page"]:not(.hide)');
-      if (!homePage) { console.error('[UserRatings] Could not find home page'); return; }
       ratingsTabContent = document.createElement('div');
       ratingsTabContent.id = 'ratingsTab';
-      ratingsTabContent.className = 'page libraryPage hide';
-      ratingsTabContent.setAttribute('data-role', 'page');
-      ratingsTabContent.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: var(--theme-body-bg);
-        z-index: 1000;
-        overflow: auto;
-      `;
-      homePage.parentNode.appendChild(ratingsTabContent);
+
+      // ✅ MATCH Jellyfin tabs
+      const nextIndex = tabsSlider.querySelectorAll('.emby-tab-button').length;
+      ratingsTabContent.className = 'tabContent pageTabContent hide';
+      ratingsTabContent.setAttribute('data-index', nextIndex || 2); // next tab index
+      ratingsTabContent.setAttribute('role', 'tabpanel');
+
+      indexPage.appendChild(ratingsTabContent);
     }
 
     ratingsTabContent.classList.remove('hide');
@@ -863,7 +876,6 @@
                         <div class="cardBox cardBox-bottompadded">
                             <div class="cardScalable">
                                 <div class="cardPadder cardPadder-portrait"></div>
-                                <canvas aria-hidden="true" width="20" height="20" class="blurhash-canvas lazy-hidden"></canvas>
                                 <a href="#/details?id=${item.itemId}&serverId=${serverId}" data-action="link" class="cardImageContainer coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast" aria-label="${title}" style="background-image:url('${imageUrl}');"></a>
                                 <div class="cardIndicators cardIndicators-bottomright">
                                     <div style="background:rgba(0,0,0,0.85);padding:0.4em 0.7em;border-radius:4px;display:inline-flex;align-items:center;gap:0.3em;">
