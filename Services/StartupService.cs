@@ -1,115 +1,82 @@
-// Services/StartupService.cs
 using System;
-using System.IO;
-using System.Linq;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.Loader;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using MediaBrowser.Controller;
+using Jellyfin.Plugin.UserRatings.Helpers;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json.Linq;
 
-public class StartupService : IHostedService
+namespace Jellyfin.Plugin.UserRatings.Services
 {
-    private readonly IServerApplicationPaths _appPaths;
-    private readonly ILogger<StartupService> _logger;
-
-    public StartupService(IServerApplicationPaths appPaths, ILogger<StartupService> logger)
+    public class StartupService : IHostedService
     {
-        _appPaths = appPaths;
-        _logger = logger;
-    }
+        private readonly ILogger<StartupService> _logger;
 
-    public Task StartAsync(CancellationToken cancellationToken)
-    {
-        // Phase 1: clean any previous direct injection (idempotent)
-        CleanDirectInjection();
-
-        // Phase 2: try File Transformation, fall back to direct injection
-        var fileTransformationAssembly = AssemblyLoadContext.All
-            .SelectMany(x => x.Assemblies)
-            .FirstOrDefault(x => x.FullName?.Contains(".FileTransformation") ?? false);
-
-        if (fileTransformationAssembly != null)
+        public StartupService(ILogger<StartupService> logger)
         {
+            _logger = logger;
+        }
+
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("[UserRating] StartupService running, registering file transformations.");
+
+            var payloads = new List<JObject>();
+
+            var payload = new JObject();
+            // Use a unique GUID for your plugin - generate one and keep it fixed
+            payload.Add("id", "d8d77dfd-f6e6-41d2-8240-f2394561c227");
+            payload.Add("fileNamePattern", "index.html");
+            payload.Add("callbackAssembly", GetType().Assembly.FullName);
+            payload.Add("callbackClass", typeof(TransformationPatches).FullName);
+            payload.Add("callbackMethod", nameof(TransformationPatches.IndexHtml));
+            payloads.Add(payload);
+
+            // Find File Transformation plugin assembly via reflection
+            Assembly? fileTransformationAssembly = null;
+            foreach (var ctx in AssemblyLoadContext.All)
+            {
+                foreach (var asm in ctx.Assemblies)
+                {
+                    if (asm.FullName?.Contains(".FileTransformation") ?? false)
+                    {
+                        fileTransformationAssembly = asm;
+                        break;
+                    }
+                }
+                if (fileTransformationAssembly != null) break;
+            }
+
+            if (fileTransformationAssembly == null)
+            {
+                _logger.LogWarning("[UserRating] File Transformation plugin not found. Script will not be injected.");
+                return Task.CompletedTask;
+            }
+
             var pluginInterfaceType = fileTransformationAssembly
                 .GetType("Jellyfin.Plugin.FileTransformation.PluginInterface");
 
-            if (pluginInterfaceType != null)
+            if (pluginInterfaceType == null)
             {
-                var payload = new
-                {
-                    id = Plugin.Instance!.Id.ToString(),
-                    fileNamePattern = "index.html",
-                    callbackAssembly = GetType().Assembly.FullName,
-                    callbackClass = typeof(TransformationPatches).FullName,
-                    callbackMethod = nameof(TransformationPatches.IndexHtml)
-                };
-
-                // File Transformation expects the payload as a serialized JObject
-                // but since we can't reference Newtonsoft directly, pass anonymously
-                pluginInterfaceType
-                    .GetMethod("RegisterTransformation")
-                    ?.Invoke(null, new object?[] { payload });
-
-                _logger.LogInformation("[UserRating] Registered with File Transformation plugin");
+                _logger.LogWarning("[UserRating] Could not find PluginInterface type in File Transformation assembly.");
                 return Task.CompletedTask;
             }
+
+            var registerMethod = pluginInterfaceType.GetMethod("RegisterTransformation");
+
+            foreach (var p in payloads)
+            {
+                registerMethod?.Invoke(null, new object?[] { p });
+            }
+
+            _logger.LogInformation("[UserRating] Successfully registered transformation with File Transformation plugin.");
+
+            return Task.CompletedTask;
         }
 
-        // Fallback: patch index.html directly
-        _logger.LogWarning("[UserRating] File Transformation not found, falling back to direct injection");
-        InjectDirect();
-
-        return Task.CompletedTask;
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-    private void CleanDirectInjection()
-    {
-        var indexPath = GetIndexHtmlPath();
-        if (!File.Exists(indexPath)) return;
-
-        var contents = File.ReadAllText(indexPath);
-        var start = "<!-- BEGIN UserRating Plugin -->";
-        var end = "<!-- END UserRating Plugin -->";
-        var startIdx = contents.IndexOf(start, StringComparison.Ordinal);
-        var endIdx = contents.IndexOf(end, StringComparison.Ordinal);
-
-        if (startIdx >= 0 && endIdx >= 0)
-        {
-            var cleaned = contents.Remove(startIdx, (endIdx + end.Length) - startIdx);
-            File.WriteAllText(indexPath, cleaned);
-        }
-    }
-
-    private void InjectDirect()
-    {
-        var indexPath = GetIndexHtmlPath();
-        if (!File.Exists(indexPath)) return;
-
-        var contents = File.ReadAllText(indexPath);
-        if (contents.Contains("UserRating/plugin.js")) return; // already injected
-
-        var block = "\n<!-- BEGIN UserRating Plugin -->" +
-                    "\n<script defer src=\"/UserRating/plugin.js\"></script>" +
-                    "\n<!-- END UserRating Plugin -->\n";
-
-        File.WriteAllText(indexPath, contents.Replace("</body>", block + "</body>",
-            StringComparison.OrdinalIgnoreCase));
-    }
-
-    private string GetIndexHtmlPath()
-    {
-        // Standard Jellyfin web root locations
-        var candidates = new[]
-        {
-            Path.Combine(_appPaths.WebPath, "index.html"),
-            "/usr/share/jellyfin/web/index.html",
-        };
-        return candidates.FirstOrDefault(File.Exists) ?? candidates[0];
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

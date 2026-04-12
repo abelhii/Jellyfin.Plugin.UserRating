@@ -10,7 +10,7 @@ public class UserRatingScriptController : ControllerBase
     public IActionResult GetScript()
     {
         var assembly = Assembly.GetExecutingAssembly();
-        var resourceName = "Jellyfin.Plugin.UserRating.Web.userrating.js";
+        var resourceName = "Jellyfin.Plugin.UserRatings.Web.userrating.js";
         var stream = assembly.GetManifestResourceStream(resourceName);
         if (stream == null) return NotFound();
         return File(stream, "application/javascript");

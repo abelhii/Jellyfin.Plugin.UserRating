@@ -1,18 +1,26 @@
-using System.Text.Json;
+using System.IO;
+using System.Reflection;
+using System.Text.RegularExpressions;
+using Jellyfin.Plugin.UserRatings.Model;
 
-public static class TransformationPatches
+namespace Jellyfin.Plugin.UserRatings.Helpers
 {
-    // File Transformation passes a JSON object: { "contents": "<html>..." }
-    public static string IndexHtml(object payload)
+    public static class TransformationPatches
     {
-        var json = JsonSerializer.Serialize(payload);
-        using var doc = JsonDocument.Parse(json);
-        var contents = doc.RootElement.GetProperty("contents").GetString();
+        public static string IndexHtml(PatchRequestPayload payload)
+        {
+            // Load the embedded JS file
+            Stream stream = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream(
+                    $"{typeof(Plugin).Namespace}.Web.userrating.js")!;
 
-        if (string.IsNullOrEmpty(contents)) return contents ?? string.Empty;
+            using TextReader reader = new StreamReader(stream);
 
-        var scriptTag = "\n<script defer src=\"/UserRating/plugin.js\"></script>\n";
-        return contents.Replace("</body>", scriptTag + "</body>",
-                                StringComparison.OrdinalIgnoreCase);
+            // Inject it as an inline script just before </body>
+            return Regex.Replace(
+                payload.Contents!,
+                "(<\\/body>)",
+                $"<script defer>{reader.ReadToEnd()}</script>$1");
+        }
     }
 }

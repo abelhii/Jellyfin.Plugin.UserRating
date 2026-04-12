@@ -1,10 +1,14 @@
-using Microsoft.Extensions.DependencyInjection;
+using Jellyfin.Plugin.UserRatings.Services;
 using MediaBrowser.Common.Plugins;
+using Microsoft.Extensions.DependencyInjection;
 
-public class PluginServiceRegistrator : IPluginServiceRegistrator
+namespace Jellyfin.Plugin.UserRatings
 {
-    public void RegisterServices(IServiceCollection serviceCollection)
+    public class PluginServiceRegistrator : IPluginServiceRegistrator
     {
-        serviceCollection.AddHostedService<StartupService>();
+        public void RegisterServices(IServiceCollection serviceCollection)
+        {
+            serviceCollection.AddHostedService<StartupService>();
+        }
     }
 }

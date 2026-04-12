@@ -22,7 +22,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Embed the JS so it ships inside the DLL -->
+    <None Remove="Web\userrating.js" />
     <EmbeddedResource Include="Web\userrating.js" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Newtonsoft.Json is required for JObject, which File Transformation expects -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 </Project>
 
