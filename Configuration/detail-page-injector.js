@@ -84,7 +84,8 @@ const DetailPageInjector = {
             if (!this.detector) {
                 this.detector = new ContainerDetector({
                     timeout: 15000, // 15 seconds
-                    requireContent: true
+                    requireContent: false, // Don't require content - container may be empty initially
+                    minSize: { width: 0, height: 0 } // Just needs to exist and be visible
                 });
             }
 

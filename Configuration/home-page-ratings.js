@@ -89,6 +89,19 @@ const HomePageRatings = {
     },
 
     /**
+     * Load plugin configuration
+     */
+    async loadPluginConfig() {
+        try {
+            const config = await ApiClient.getPluginConfiguration('b8c5d3e7-4f6a-8b9c-1d2e-3f4a5b6c7d8e');
+            return config.RecentlyRatedItemsCount || 10;
+        } catch (error) {
+            console.warn('[UserRatings] Could not load plugin config, using default:', error);
+            return 10;
+        }
+    },
+
+    /**
      * Display the ratings list on home page
      */
     async displayRatingsList() {
@@ -151,7 +164,11 @@ const HomePageRatings = {
                 items.map(async (item) => {
                     try {
                         const details = await ApiClient.getItem(ApiClient.getCurrentUserId(), item.itemId);
-                        return { ...item, details };
+                        return { 
+                            ...item, 
+                            details,
+                            lastRatedTimestamp: item.lastRated ? new Date(item.lastRated).getTime() : 0
+                        };
                     } catch (error) {
                         console.error('[UserRatings] Error loading item:', error);
                         return null;
@@ -167,8 +184,34 @@ const HomePageRatings = {
                 return;
             }
 
-            // Render the list
-            this.renderRatingsList(ratingsTabContent, validItems);
+            // Render the list with configured limit
+            const itemsLimit = await this.loadPluginConfig();
+            this.renderRatingsList(ratingsTabContent, validItems, itemsLimit);
+            
+            // Add click handlers to cards
+            setTimeout(() => {
+                const cards = ratingsTabContent.querySelectorAll('[id^="rating-card-"]');
+                cards.forEach(card => {
+                    card.addEventListener('click', (e) => {
+                        const match = card.id.match(/rating-card-([^-]+)/);
+                        if (match) {
+                            const itemId = match[1];
+                            const serverId = ApiClient.serverId();
+                            
+                            // Hide ratings tab and navigate
+                            const ratingsTab = document.querySelector('#ratingsTab');
+                            if (ratingsTab) {
+                                ratingsTab.style.display = 'none';
+                                ratingsTab.classList.add('hide');
+                            }
+                            
+                            // Navigate to detail page
+                            window.location.hash = `#/details?id=${itemId}&serverId=${serverId}`;
+                        }
+                    });
+                });
+            }, 100);
+            
             this.isDisplayingList = false;
 
         } catch (error) {
@@ -184,10 +227,13 @@ const HomePageRatings = {
     /**
      * Render the ratings list UI
      */
-    renderRatingsList(container, items) {
-        const movies = items.filter(item => item.details.Type === 'Movie');
-        const series = items.filter(item => item.details.Type === 'Series');
-        const episodes = items.filter(item => item.details.Type === 'Episode');
+    renderRatingsList(container, items, itemsLimit = 10) {
+        // Apply configured limit to each category
+        const sortByRecent = (a, b) => (b.lastRatedTimestamp || 0) - (a.lastRatedTimestamp || 0);
+        
+        const movies = items.filter(item => item.details.Type === 'Movie').sort(sortByRecent).slice(0, itemsLimit);
+        const series = items.filter(item => item.details.Type === 'Series').sort(sortByRecent).slice(0, itemsLimit);
+        const episodes = items.filter(item => item.details.Type === 'Episode').sort(sortByRecent).slice(0, itemsLimit);
 
         let html = '<div class="readOnlyContent" style="padding-top: 4em;">';
 
@@ -241,7 +287,7 @@ const HomePageRatings = {
      * Build item cards HTML
      */
     buildItemCards(items) {
-        return items.map(item => {
+        return items.map((item, index) => {
             const details = item.details;
             const imageId = details.Type === 'Episode' && details.SeriesId ? details.SeriesId : item.itemId;
             const imageUrl = ApiClient.getImageUrl(imageId, {
@@ -254,13 +300,14 @@ const HomePageRatings = {
             const rating = (item.averageRating || 0).toFixed(1);
             const count = item.totalRatings || 0;
             const serverId = ApiClient.serverId();
+            const cardId = `rating-card-${item.itemId}-${index}`;
 
             return `
-                <div class="card portraitCard card-hoverable" style="min-width: 150px; max-width: 250px;">
+                <div id="${cardId}" class="card portraitCard card-hoverable" style="min-width: 150px; max-width: 250px; cursor: pointer;">
                     <div class="cardBox cardBox-bottompadded">
                         <div class="cardScalable">
                             <div class="cardPadder cardPadder-portrait"></div>
-                            <a href="#/details?id=${item.itemId}&serverId=${serverId}" class="cardImageContainer" aria-label="${title}" style="background-image: url('${imageUrl}');"></a>
+                            <div class="cardImageContainer" aria-label="${title}" style="background-image: url('${imageUrl}'); cursor: pointer;"></div>
                             <div class="cardIndicators cardIndicators-bottomright">
                                 <div style="background: rgba(0,0,0,0.85); padding: 0.4em 0.7em; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3em;">
                                     <span style="color: #ffd700; font-size: 1.1em;">★</span>
@@ -270,7 +317,7 @@ const HomePageRatings = {
                             </div>
                         </div>
                         <div class="cardText cardTextCentered cardText-first">
-                            <a href="#/details?id=${item.itemId}&serverId=${serverId}" title="${title}">${title}</a>
+                            <span title="${title}" style="cursor: pointer;">${title}</span>
                         </div>
                     </div>
                 </div>
