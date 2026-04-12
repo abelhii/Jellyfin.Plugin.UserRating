@@ -21,5 +21,8 @@
     <EmbeddedResource Include="Configuration\ratings.js" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Web\userrating.js" />
+  </ItemGroup>
 </Project>
 
