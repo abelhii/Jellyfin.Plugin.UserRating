@@ -1,4 +1,4 @@
-(function() {
+(function () {
     'use strict';
 
     console.log('[UserRatings] Loading plugin...');
@@ -15,6 +15,8 @@
             margin-bottom: 2em;
             border: 1px solid rgba(255, 255, 255, 0.08);
             box-sizing: border-box;
+            order: 4;
+            grid-column: 1/-1;
         }
         .user-ratings-container * {
             box-sizing: border-box;
@@ -229,32 +231,48 @@
     let lastNavigationTime = 0; // Track when navigation occurred
 
     function createStarRating(rating, interactive, onHover, onClick) {
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = 'display:inline-flex;align-items:center;gap:0.5em;';
+
         const container = document.createElement('div');
         container.className = 'star-rating';
         let currentSelectedRating = rating;
-        
+
+        const label = document.createElement('span');
+        label.style.cssText = 'font-size:1em;color:rgba(255,255,255,0.7);min-width:3.5em;font-variant-numeric:tabular-nums;';
+        label.textContent = rating > 0 ? `${rating}/10` : '';
+
         for (let i = 1; i <= 10; i++) {
             const star = document.createElement('span');
             star.className = 'star' + (i <= rating ? ' filled' : '');
             star.textContent = '★';
             star.dataset.rating = i;
-            
+
             if (interactive) {
-                star.addEventListener('mouseenter', () => onHover(i));
+                star.addEventListener('mouseenter', () => {
+                    label.textContent = `${i}/10`;
+                    onHover(i);
+                });
                 star.addEventListener('click', () => {
                     currentSelectedRating = i;
+                    label.textContent = `${i}/10`;
                     onClick(i);
                 });
             }
-            
+
             container.appendChild(star);
         }
-        
+
         if (interactive) {
-            container.addEventListener('mouseleave', () => onHover(currentSelectedRating));
+            container.addEventListener('mouseleave', () => {
+                label.textContent = currentSelectedRating > 0 ? `${currentSelectedRating}/10` : '';
+                onHover(currentSelectedRating);
+            });
         }
-        
-        return container;
+
+        wrapper.appendChild(container);
+        wrapper.appendChild(label);
+        return wrapper;
     }
 
     function updateStarDisplay(container, rating) {
@@ -312,13 +330,13 @@
                     'X-Emby-Token': ApiClient.accessToken()
                 }
             });
-            
+
             if (!response.ok) {
                 const text = await response.text();
                 console.error('[UserRatings] Server error:', response.status, text);
                 return { success: false, message: `Server error: ${response.status}` };
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('[UserRatings] Error saving rating:', error);
@@ -347,25 +365,25 @@
         // Only refresh on details page
         const currentHash = window.location.hash;
         const currentUrl = window.location.href;
-        const isDetailsPage = currentHash.includes('#/details') || currentHash.includes('/details') || 
-                              currentUrl.includes('/details') || 
-                              (itemId && currentHash.includes(itemId));
-        
+        const isDetailsPage = currentHash.includes('#/details') || currentHash.includes('/details') ||
+            currentUrl.includes('/details') ||
+            (itemId && currentHash.includes(itemId));
+
         if (!isDetailsPage) {
             console.log('[UserRatings] Skipping refresh - not on details page');
             return;
         }
-        
+
         // Don't refresh if we recently refreshed (prevent loops)
         // Unless forced (from final zero-size check)
         if (!force && hasTriedRefresh) {
             console.log('[UserRatings] Skipping refresh - already tried once');
             return;
         }
-        
+
         console.log('[UserRatings] Performing hard page refresh', force ? '(FORCED)' : '');
         hasTriedRefresh = true;
-        
+
         // Hard refresh - reload the page completely
         // This bypasses cache and reloads everything fresh
         window.location.reload(true);
@@ -376,7 +394,7 @@
         const container = document.createElement('div');
         container.className = 'user-ratings-container';
         container.id = 'user-ratings-ui';
-        
+
         // Get item name for personalized heading
         let itemName = 'this item';
         try {
@@ -389,34 +407,34 @@
         } catch (error) {
             console.log('[UserRatings] Could not load item name:', error);
         }
-        
+
         // Header
         const header = document.createElement('div');
         header.className = 'user-ratings-header';
         header.innerHTML = '<span>User Ratings</span>';
-        
+
         const avgSpan = document.createElement('span');
         avgSpan.className = 'user-ratings-average';
         avgSpan.id = 'ratings-average-display';
         header.appendChild(avgSpan);
         container.appendChild(header);
-        
+
         // My Rating Section
         const myRatingSection = document.createElement('div');
         myRatingSection.className = 'user-ratings-my-rating';
-        
+
         // Star Rating Section
         const starSection = document.createElement('div');
         starSection.className = 'rating-form-section';
-        
+
         const myRatingTitle = document.createElement('div');
         myRatingTitle.className = 'user-ratings-section-title';
         myRatingTitle.textContent = `How would you rate ${itemName}?`;
         starSection.appendChild(myRatingTitle);
-        
+
         const starRatingContainer = document.createElement('div');
         starRatingContainer.className = 'star-rating-container';
-        
+
         const starContainer = createStarRating(0, true,
             (rating) => {
                 updateStarDisplay(starContainer, rating);
@@ -429,51 +447,51 @@
             }
         );
         starRatingContainer.appendChild(starContainer);
-        
+
         const ratingPrompt = document.createElement('span');
         ratingPrompt.className = 'rating-prompt';
         ratingPrompt.textContent = 'Select your rating';
         starRatingContainer.appendChild(ratingPrompt);
-        
+
         starSection.appendChild(starRatingContainer);
         myRatingSection.appendChild(starSection);
-        
+
         // Review Text Section
         const reviewSection = document.createElement('div');
         reviewSection.className = 'rating-form-section';
-        
+
         const reviewTitle = document.createElement('div');
         reviewTitle.className = 'user-ratings-section-title';
         reviewTitle.textContent = 'Tell us about your experience';
         reviewSection.appendChild(reviewTitle);
-        
+
         const reviewSubtitle = document.createElement('div');
         reviewSubtitle.className = 'user-ratings-section-subtitle';
         reviewSubtitle.textContent = 'Share your thoughts (optional)';
         reviewSection.appendChild(reviewSubtitle);
-        
+
         const noteInput = document.createElement('textarea');
         noteInput.className = 'rating-note-input';
         noteInput.placeholder = 'Start your review...';
         reviewSection.appendChild(noteInput);
-        
+
         const charCount = document.createElement('div');
         charCount.className = 'rating-char-count';
         charCount.textContent = '0 characters';
         reviewSection.appendChild(charCount);
-        
+
         // Character counter
         noteInput.addEventListener('input', () => {
             const length = noteInput.value.length;
             charCount.textContent = `${length} character${length !== 1 ? 's' : ''}`;
         });
-        
+
         myRatingSection.appendChild(reviewSection);
-        
+
         // Actions
         const actionsContainer = document.createElement('div');
         actionsContainer.className = 'rating-actions';
-        
+
         const saveBtn = document.createElement('button');
         saveBtn.className = 'save-btn';
         saveBtn.textContent = 'Post Rating';
@@ -482,19 +500,19 @@
                 alert('Please select a rating');
                 return;
             }
-            
+
             saveBtn.disabled = true;
             saveBtn.textContent = 'Posting...';
-            
+
             const result = await saveRating(itemId, currentRating, noteInput.value);
-            
+
             if (result.success) {
                 saveBtn.textContent = 'Posted!';
                 setTimeout(() => {
                     saveBtn.textContent = 'Post Rating';
                     saveBtn.disabled = false;
                 }, 2000);
-                
+
                 // Reload all ratings
                 await displayAllRatings(itemId, container);
                 deleteBtn.style.display = 'inline-block';
@@ -505,7 +523,7 @@
             }
         });
         actionsContainer.appendChild(saveBtn);
-        
+
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'delete-btn';
         deleteBtn.textContent = 'Delete Rating';
@@ -514,37 +532,37 @@
             if (!confirm('Delete your rating?')) {
                 return;
             }
-            
+
             deleteBtn.disabled = true;
             deleteBtn.textContent = 'Deleting...';
-            
+
             const result = await deleteRating(itemId);
-            
+
             if (result.success) {
                 currentRating = 0;
                 noteInput.value = '';
                 updateStarDisplay(starContainer, 0);
                 deleteBtn.style.display = 'none';
-                
+
                 await displayAllRatings(itemId, container);
             } else {
                 alert('Error deleting rating: ' + result.message);
             }
-            
+
             deleteBtn.textContent = 'Delete Rating';
             deleteBtn.disabled = false;
         });
         actionsContainer.appendChild(deleteBtn);
-        
+
         myRatingSection.appendChild(actionsContainer);
         container.appendChild(myRatingSection);
-        
+
         // All Ratings Section
         const allRatingsSection = document.createElement('div');
         allRatingsSection.className = 'user-ratings-all';
         allRatingsSection.id = 'all-ratings-section';
         container.appendChild(allRatingsSection);
-        
+
         // Load existing rating
         console.log('[UserRatings] → Loading my rating...');
         const myRating = await loadMyRating(itemId);
@@ -559,12 +577,12 @@
             charCount.textContent = `${length} character${length !== 1 ? 's' : ''}`;
             deleteBtn.style.display = 'inline-block';
         }
-        
+
         // Load all ratings
         console.log('[UserRatings] → Loading all ratings...');
         await displayAllRatings(itemId, container);
         console.log('[UserRatings] → All ratings loaded, returning container');
-        
+
         // Check size after all async operations complete
         setTimeout(() => {
             const rect = container.getBoundingClientRect();
@@ -575,7 +593,7 @@
                 container.dataset.zeroSize = 'true';
             }
         }, 200);
-        
+
         return container;
     }
 
@@ -583,75 +601,75 @@
         console.log('[UserRatings] → displayAllRatings started');
         const allRatingsSection = container.querySelector('#all-ratings-section');
         const avgDisplay = container.querySelector('#ratings-average-display');
-        
+
         if (!allRatingsSection) {
             console.log('[UserRatings] → No allRatingsSection found, returning early');
             return;
         }
-        
+
         allRatingsSection.innerHTML = '';
-        
+
         console.log('[UserRatings] → Calling loadRatings...');
         const data = await loadRatings(itemId);
         console.log('[UserRatings] → loadRatings returned, processing data...');
         const ratings = data.ratings || [];
         const averageRating = data.averageRating || 0;
         const totalRatings = data.totalRatings || 0;
-        
+
         // Update average display
         if (totalRatings > 0) {
             avgDisplay.textContent = `★ ${averageRating.toFixed(1)} (${totalRatings} ${totalRatings === 1 ? 'rating' : 'ratings'})`;
         } else {
             avgDisplay.textContent = 'No ratings yet';
         }
-        
+
         if (ratings.length === 0) {
             return;
         }
-        
+
         const title = document.createElement('div');
         title.className = 'user-ratings-section-title';
         title.textContent = 'All Ratings';
         allRatingsSection.appendChild(title);
-        
+
         ratings.forEach(rating => {
             const item = document.createElement('div');
             item.className = 'rating-item';
-            
+
             // Header with user, stars, and date
             const header = document.createElement('div');
             header.className = 'rating-item-header';
-            
+
             const leftSide = document.createElement('div');
             const userName = document.createElement('span');
             userName.className = 'rating-item-user';
             userName.textContent = rating.userName || rating.UserName || 'Unknown User';
             leftSide.appendChild(userName);
-            
+
             const stars = document.createElement('span');
             stars.className = 'rating-item-stars';
             const ratingValue = rating.rating || rating.Rating || 0;
             stars.textContent = '★'.repeat(ratingValue) + '☆'.repeat(5 - ratingValue);
             leftSide.appendChild(stars);
-            
+
             header.appendChild(leftSide);
-            
+
             // Date
             const timestamp = rating.timestamp || rating.Timestamp;
             if (timestamp) {
                 const date = document.createElement('span');
                 date.className = 'rating-item-date';
                 const dateObj = new Date(timestamp);
-                date.textContent = dateObj.toLocaleDateString(undefined, { 
-                    year: 'numeric', 
-                    month: 'short', 
-                    day: 'numeric' 
+                date.textContent = dateObj.toLocaleDateString(undefined, {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
                 });
                 header.appendChild(date);
             }
-            
+
             item.appendChild(header);
-            
+
             // Note
             const noteText = rating.note || rating.Note;
             if (noteText) {
@@ -660,7 +678,7 @@
                 note.textContent = noteText;
                 item.appendChild(note);
             }
-            
+
             allRatingsSection.appendChild(item);
         });
         console.log('[UserRatings] → displayAllRatings completed');
@@ -668,37 +686,37 @@
 
     let injectionAttempts = 0;
     const maxInjectionAttempts = 30; // Increased from 20
-    
+
     function injectRatingsUI() {
         // Prevent concurrent injections
         if (isInjecting) {
             console.log('[UserRatings] Already injecting, skipping');
             return;
         }
-        
+
         // Get item ID from URL first
         let itemId = null;
         const urlParams = new URLSearchParams(window.location.search);
         itemId = urlParams.get('id');
-        
+
         if (!itemId && window.location.hash.includes('?')) {
             const hashParams = new URLSearchParams(window.location.hash.split('?')[1]);
             itemId = hashParams.get('id');
         }
-        
+
         if (!itemId) {
             const guidMatch = window.location.href.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
             if (guidMatch) {
                 itemId = guidMatch[1];
             }
         }
-        
+
         if (!itemId) {
             console.log('[UserRatings] No item ID found');
             injectionAttempts = 0;
             return;
         }
-        
+
         // Check if UI already exists - if for same item, skip; if different item, remove it
         const existingUI = document.getElementById('user-ratings-ui');
         if (existingUI && currentItemId === itemId) {
@@ -706,19 +724,19 @@
             injectionAttempts = 0;
             return;
         }
-        
+
         // If UI exists for different item, remove it
         if (existingUI && currentItemId !== itemId) {
             console.log('[UserRatings] Removing UI for previous item');
             existingUI.remove();
         }
-        
+
         // Try multiple selector strategies to find the container
         let targetContainer = null;
-        
+
         // Strategy 1: Look for .detailSection inside .detailPagePrimaryContent
         targetContainer = document.querySelector('.detailPagePrimaryContent .detailSection');
-        
+
         // Strategy 2: Look for .detailPagePrimaryContent itself
         if (!targetContainer) {
             const primaryContent = document.querySelector('.detailPagePrimaryContent');
@@ -729,12 +747,12 @@
                 }
             }
         }
-        
+
         // Strategy 3: Look for any detail section
         if (!targetContainer) {
             targetContainer = document.querySelector('.detailSection');
         }
-        
+
         // Strategy 4: Look for itemDetailPage
         if (!targetContainer) {
             const detailPage = document.querySelector('.itemDetailPage .detailPageContent');
@@ -742,7 +760,7 @@
                 targetContainer = detailPage;
             }
         }
-        
+
         if (!targetContainer) {
             // If container not ready yet, retry with backoff
             if (injectionAttempts < maxInjectionAttempts) {
@@ -752,7 +770,7 @@
                 setTimeout(injectRatingsUI, retryDelay);
             } else {
                 console.log('[UserRatings] Max injection attempts reached, attempting seamless refresh');
-                
+
                 // Try seamless refresh - only once per page load
                 if (!hasTriedRefresh && itemId) {
                     hasTriedRefresh = true;
@@ -764,35 +782,35 @@
             }
             return;
         }
-        
+
         currentItemId = itemId;
         isInjecting = true;
         injectionAttempts = 0; // Reset counter on successful injection
         console.log('[UserRatings] Injecting UI for item:', itemId, 'into container:', targetContainer.className);
-        
+
         // Create and inject UI at the end of target container
         createRatingsUI(itemId).then(ui => {
             targetContainer.appendChild(ui);
-            
+
             // Function to check size and handle refresh
             const checkSizeAndRefresh = (checkName) => {
                 const rect = ui.getBoundingClientRect();
                 const hasZeroSize = rect.width === 0 && rect.height === 0;
                 const hasZeroSizeFlag = ui.dataset.zeroSize === 'true';
-                
+
                 console.log(`[UserRatings] ${checkName} size check:`, rect.width, 'x', rect.height, hasZeroSize ? '(ZERO)' : '', hasZeroSizeFlag ? '(flagged)' : '');
-                
+
                 // Check if zero size or was flagged during creation
                 if (hasZeroSize || hasZeroSizeFlag) {
                     // Final check always forces refresh
                     const isFinalCheck = checkName === 'Final';
-                    
+
                     if (isFinalCheck) {
                         // For final check, clear all flags to allow refresh
                         console.log('[UserRatings] Final check detected zero size - forcing refresh');
                         hasTriedRefresh = false; // Allow refresh even if we tried before
                     }
-                    
+
                     console.log('[UserRatings] UI has zero size, triggering refresh', isFinalCheck ? '(FORCED)' : '');
                     const injectedUI = document.getElementById('user-ratings-ui');
                     if (injectedUI) {
@@ -808,14 +826,14 @@
                     return false; // No refresh needed
                 }
             };
-            
+
             // Immediate check (after DOM insertion)
             setTimeout(() => {
                 if (!checkSizeAndRefresh('Immediate')) {
                     isInjecting = false;
                 }
             }, 100);
-            
+
             // Check after async operations should complete
             setTimeout(() => {
                 if (!checkSizeAndRefresh('Post-async')) {
@@ -826,12 +844,12 @@
                     }
                 }
             }, 800);
-            
+
             // Final check after longer delay
             setTimeout(() => {
                 checkSizeAndRefresh('Final');
             }, 1500);
-            
+
         }).catch(err => {
             console.error('[UserRatings] Error creating UI:', err);
             isInjecting = false;
@@ -847,12 +865,12 @@
         if (!isDetailsPage) {
             return;
         }
-        
+
         // Don't check if we just tried to refresh (prevent loops)
         if (hasTriedRefresh) {
             return;
         }
-        
+
         const ui = document.getElementById('user-ratings-ui');
         if (ui && currentItemId) {
             const rect = ui.getBoundingClientRect();
@@ -873,46 +891,46 @@
             }
         }
     }, 2000); // Check every 2 seconds
-    
+
     // Watch for page changes with more aggressive detection
     let lastUrl = location.href;
     let lastCheckedItemId = null;
     new MutationObserver((mutations) => {
         const url = location.href;
-        
+
         // Check if URL changed
         if (url !== lastUrl) {
             lastUrl = url;
-            
+
             // Remove old UI when navigating to a new page
             const oldUI = document.getElementById('user-ratings-ui');
             if (oldUI) {
                 console.log('[UserRatings] Removing old UI on navigation');
                 oldUI.remove();
             }
-            
+
             // Hide ratings tab when navigating away from home
             const ratingsTab = document.querySelector('#ratingsTab');
             if (ratingsTab && !url.includes('#/home')) {
                 ratingsTab.classList.remove('is-active');
                 ratingsTab.style.display = 'none';
             }
-            
+
             // Reset injection state (don't mark as navigating - let normal navigation proceed)
             isInjecting = false;
             injectionAttempts = 0;
             currentItemId = null;
             hasTriedRefresh = false; // Reset refresh flag for new page
-            
+
             // Clear navigation flags immediately - don't block navigation
             isNavigating = false;
             lastNavigationTime = 0;
-            
+
             // Try injection with slight delay
             setTimeout(injectRatingsUI, 150);
             return;
         }
-        
+
         // Even if URL didn't change, check if detail page content appeared
         // This handles cases where the page loads but URL was already set
         for (const mutation of mutations) {
@@ -951,7 +969,7 @@
     setTimeout(injectRatingsUI, 100);
     setTimeout(injectRatingsUI, 300);
     setTimeout(injectRatingsUI, 600);
-    
+
     // Also check on hash change
     window.addEventListener('hashchange', () => {
         // Remove old UI on hash change
@@ -959,11 +977,11 @@
         if (oldUI) {
             oldUI.remove();
         }
-        
+
         // Manage page visibility
         const ratingsTab = document.querySelector('#ratingsTab');
         const currentHash = window.location.hash;
-        
+
         if (ratingsTab) {
             if (!currentHash.includes('home')) {
                 // Navigating away from home - hide ratings page
@@ -975,7 +993,7 @@
                 console.log('[UserRatings] Navigating to home - ensuring clean state');
                 ratingsTab.style.display = 'none';
                 ratingsTab.classList.add('hide');
-                
+
                 // Hide ALL pages except home
                 const allPages = document.querySelectorAll('[data-role="page"]');
                 allPages.forEach(page => {
@@ -984,7 +1002,7 @@
                         page.style.display = 'none';
                     }
                 });
-                
+
                 // Show only the home page
                 const homePage = document.querySelector('[data-role="page"].homePage:not(#ratingsTab)');
                 if (homePage) {
@@ -994,17 +1012,17 @@
                 }
             }
         }
-        
+
         // Reset injection state (don't mark as navigating - let normal navigation proceed)
         isInjecting = false;
         injectionAttempts = 0;
         currentItemId = null;
         hasTriedRefresh = false; // Reset refresh flag for new page
-        
+
         // Clear navigation flags immediately - don't block navigation
         isNavigating = false;
         lastNavigationTime = 0;
-        
+
         // Try injection with multiple attempts
         setTimeout(injectRatingsUI, 100);
         setTimeout(injectRatingsUI, 300);
@@ -1014,50 +1032,50 @@
     async function displayRatingsList() {
         // Find or create the ratings tab content container
         let ratingsTabContent = document.querySelector('#ratingsTab');
-        
-            if (!ratingsTabContent) {
-                // Find the home page - this is the main page container
-                const homePage = document.querySelector('[data-role="page"]:not(.hide)');
-                
-                if (!homePage) {
-                    console.error('[UserRatings] Could not find home page');
-                    return;
-                }
-                
-                // Try multiple selectors to find the content container
-                let scrollContainer = homePage.querySelector('.scrollY');
-                if (!scrollContainer) {
-                    scrollContainer = homePage.querySelector('.pageTabContent');
-                }
-                if (!scrollContainer) {
-                    scrollContainer = homePage.querySelector('.scrollContainer');
-                }
-                if (!scrollContainer) {
-                    // Just use the page itself as the container
-                    scrollContainer = homePage;
-                }
-                
-                ratingsTabContent = document.createElement('div');
-                ratingsTabContent.id = 'ratingsTab';
-                ratingsTabContent.className = 'page homePage libraryPage hide';
-                ratingsTabContent.setAttribute('data-role', 'page');
-                ratingsTabContent.style.position = 'absolute';
-                ratingsTabContent.style.top = '0';
-                ratingsTabContent.style.left = '0';
-                ratingsTabContent.style.right = '0';
-                ratingsTabContent.style.bottom = '0';
-                ratingsTabContent.style.overflow = 'auto';
-                
-                // Add as sibling to home page
-                homePage.parentNode.appendChild(ratingsTabContent);
+
+        if (!ratingsTabContent) {
+            // Find the home page - this is the main page container
+            const homePage = document.querySelector('[data-role="page"]:not(.hide)');
+
+            if (!homePage) {
+                console.error('[UserRatings] Could not find home page');
+                return;
             }
-        
+
+            // Try multiple selectors to find the content container
+            let scrollContainer = homePage.querySelector('.scrollY');
+            if (!scrollContainer) {
+                scrollContainer = homePage.querySelector('.pageTabContent');
+            }
+            if (!scrollContainer) {
+                scrollContainer = homePage.querySelector('.scrollContainer');
+            }
+            if (!scrollContainer) {
+                // Just use the page itself as the container
+                scrollContainer = homePage;
+            }
+
+            ratingsTabContent = document.createElement('div');
+            ratingsTabContent.id = 'ratingsTab';
+            ratingsTabContent.className = 'page homePage libraryPage hide';
+            ratingsTabContent.setAttribute('data-role', 'page');
+            ratingsTabContent.style.position = 'absolute';
+            ratingsTabContent.style.top = '0';
+            ratingsTabContent.style.left = '0';
+            ratingsTabContent.style.right = '0';
+            ratingsTabContent.style.bottom = '0';
+            ratingsTabContent.style.overflow = 'auto';
+
+            // Add as sibling to home page
+            homePage.parentNode.appendChild(ratingsTabContent);
+        }
+
         // Hide the home page and show ratings tab
         const homePage = document.querySelector('[data-role="page"]:not(.hide):not(#ratingsTab)');
         if (homePage) {
             homePage.classList.add('hide');
         }
-        
+
         ratingsTabContent.classList.remove('hide');
         ratingsTabContent.style.display = 'block';
         ratingsTabContent.style.pointerEvents = 'auto';
@@ -1148,7 +1166,7 @@
             movies.sort(sortByRecent);
             series.sort(sortByRecent);
             episodes.sort(sortByRecent);
-            
+
             // Slice to show only configured number of recent items
             const recentMovies = movies.slice(0, recentItemsLimit);
             const recentSeries = series.slice(0, recentItemsLimit);
@@ -1157,7 +1175,7 @@
             // Function to build the ratings grid HTML for a category
             const buildCategoryGrid = (items) => items.map(item => {
                 const details = item.details;
-                
+
                 // For episodes, use the series thumbnail instead
                 const imageId = details.Type === 'Episode' && details.SeriesId ? details.SeriesId : item.itemId;
                 const imageUrl = ApiClient.getImageUrl(imageId, {
@@ -1198,7 +1216,7 @@
 
             // Build sections HTML matching native Jellyfin structure with explicit spacing
             let sectionsHTML = '<div class="readOnlyContent" style="padding-top: 4em;">';
-            
+
             if (recentMovies.length > 0) {
                 sectionsHTML += `
                     <div class="verticalSection">
@@ -1211,7 +1229,7 @@
                     </div>
                 `;
             }
-            
+
             if (recentSeries.length > 0) {
                 sectionsHTML += `
                     <div class="verticalSection">
@@ -1224,7 +1242,7 @@
                     </div>
                 `;
             }
-            
+
             if (recentEpisodes.length > 0) {
                 sectionsHTML += `
                     <div class="verticalSection">
@@ -1237,18 +1255,18 @@
                     </div>
                 `;
             }
-            
+
             sectionsHTML += '</div>';
-            
+
             // Add "All Rated Items" section with pagination and sorting
             let currentPage = 1;
             const itemsPerPage = 24;
             let currentSort = 'rating-desc';
             let allItems = [...itemsWithDetails];
-            
+
             const renderAllItemsSection = (page, sortBy) => {
                 // Sort items
-                switch(sortBy) {
+                switch (sortBy) {
                     case 'rating-desc':
                         allItems.sort((a, b) => b.averageRating - a.averageRating);
                         break;
@@ -1274,19 +1292,19 @@
                         allItems.sort((a, b) => a.totalRatings - b.totalRatings);
                         break;
                 }
-                
+
                 // Pagination
                 const startIndex = (page - 1) * itemsPerPage;
                 const endIndex = startIndex + itemsPerPage;
                 const paginatedItems = allItems.slice(startIndex, endIndex);
                 const totalPages = Math.ceil(allItems.length / itemsPerPage);
-                
+
                 const allItemsSection = document.querySelector('#allItemsSection');
                 if (!allItemsSection) return;
-                
+
                 const startItem = startIndex + 1;
                 const endItem = Math.min(endIndex, allItems.length);
-                
+
                 allItemsSection.innerHTML = `
                     <div class="verticalSection">
                         <div class="sectionTitleContainer sectionTitleContainer-cards padded-left">
@@ -1322,7 +1340,7 @@
                         </div>
                     </div>
                 `;
-                
+
                 // Add event listeners
                 const sortSelect = document.querySelector('#sortSelect');
                 if (sortSelect) {
@@ -1332,7 +1350,7 @@
                         renderAllItemsSection(currentPage, currentSort);
                     });
                 }
-                
+
                 const prevBtn = document.querySelector('#prevPage');
                 if (prevBtn && !prevBtn.disabled) {
                     prevBtn.addEventListener('click', () => {
@@ -1341,7 +1359,7 @@
                         allItemsSection.scrollIntoView({ behavior: 'smooth' });
                     });
                 }
-                
+
                 const nextBtn = document.querySelector('#nextPage');
                 if (nextBtn && !nextBtn.disabled) {
                     nextBtn.addEventListener('click', () => {
@@ -1351,16 +1369,16 @@
                     });
                 }
             };
-            
+
             sectionsHTML += '<div id="allItemsSection"></div></div>';
-            
+
             // Display the categorized grid
             ratingsTabContent.innerHTML = sectionsHTML;
             ratingsTabContent.style.pointerEvents = 'auto'; // Ensure clicks work
-            
+
             // Render the "All Items" section
             renderAllItemsSection(currentPage, currentSort);
-            
+
             // Add click handlers to cards
             ratingsTabContent.querySelectorAll('.card[data-item-id]').forEach(card => {
                 card.addEventListener('click', (e) => {
@@ -1387,7 +1405,7 @@
             if (!window.location.hash.includes('home')) {
                 return;
             }
-            
+
             // Check if tab already exists
             const existingTab = document.querySelector('[data-ratings-tab="true"]');
             if (existingTab) {
@@ -1395,78 +1413,78 @@
             }
 
             // Try to find the tabs container by locating the Home button first
-            const homeButton = Array.from(document.querySelectorAll('.emby-tab-button')).find(btn => 
+            const homeButton = Array.from(document.querySelectorAll('.emby-tab-button')).find(btn =>
                 btn.textContent.trim().toLowerCase().includes('home')
             );
-            
+
             let tabsSlider = null;
-            
+
             if (homeButton) {
                 tabsSlider = homeButton.parentElement;
             } else {
                 // Strategy 2: Look for .emby-tabs-slider
                 tabsSlider = document.querySelector('.emby-tabs-slider');
             }
-            
+
             if (!tabsSlider) {
                 return;
             }
 
-        // Get the next index
-        const existingTabs = tabsSlider.querySelectorAll('.emby-tab-button');
-        const nextIndex = existingTabs.length;
+            // Get the next index
+            const existingTabs = tabsSlider.querySelectorAll('.emby-tab-button');
+            const nextIndex = existingTabs.length;
 
-        // Create the ratings tab button
-        const ratingsTab = document.createElement('button');
-        ratingsTab.type = 'button';
-        ratingsTab.setAttribute('is', 'emby-button');
-        ratingsTab.className = 'emby-tab-button emby-button';
-        ratingsTab.setAttribute('data-index', nextIndex);
-        ratingsTab.setAttribute('data-ratings-tab', 'true');
-        ratingsTab.innerHTML = '<div class="emby-button-foreground">User Ratings</div>';
+            // Create the ratings tab button
+            const ratingsTab = document.createElement('button');
+            ratingsTab.type = 'button';
+            ratingsTab.setAttribute('is', 'emby-button');
+            ratingsTab.className = 'emby-tab-button emby-button';
+            ratingsTab.setAttribute('data-index', nextIndex);
+            ratingsTab.setAttribute('data-ratings-tab', 'true');
+            ratingsTab.innerHTML = '<div class="emby-button-foreground">User Ratings</div>';
 
-        // Add click handler
-        ratingsTab.addEventListener('click', async function(e) {
-            e.preventDefault();
-            
-            // Remove active class from all tabs
-            tabsSlider.querySelectorAll('.emby-tab-button').forEach(tab => {
-                tab.classList.remove('emby-tab-button-active');
+            // Add click handler
+            ratingsTab.addEventListener('click', async function (e) {
+                e.preventDefault();
+
+                // Remove active class from all tabs
+                tabsSlider.querySelectorAll('.emby-tab-button').forEach(tab => {
+                    tab.classList.remove('emby-tab-button-active');
+                });
+
+                // Add active class to this tab
+                ratingsTab.classList.add('emby-tab-button-active');
+
+                try {
+                    // Load and display ratings list in the home page
+                    await displayRatingsList();
+                } catch (error) {
+                    console.error('[UserRatings] Error in displayRatingsList:', error);
+                }
             });
-            
-            // Add active class to this tab
-            ratingsTab.classList.add('emby-tab-button-active');
-            
-            try {
-                // Load and display ratings list in the home page
-                await displayRatingsList();
-            } catch (error) {
-                console.error('[UserRatings] Error in displayRatingsList:', error);
-            }
-        });
 
-        // Add listeners to other tabs to properly switch content
-        const otherTabs = tabsSlider.querySelectorAll('.emby-tab-button:not([data-ratings-tab="true"])');
-        otherTabs.forEach((tab, index) => {
-            tab.addEventListener('click', function(e) {
-                // Hide ratings tab
-                const ratingsTabContent = document.querySelector('#ratingsTab');
-                if (ratingsTabContent) {
-                    ratingsTabContent.style.display = 'none';
-                    ratingsTabContent.classList.add('hide');
-                }
-                
-                // Show the home page
-                const homePage = document.querySelector('[data-role="page"].hide:not(#ratingsTab)');
-                if (homePage) {
-                    homePage.classList.remove('hide');
-                }
-            }, true); // Use capture to run before Jellyfin's handler
-        });
+            // Add listeners to other tabs to properly switch content
+            const otherTabs = tabsSlider.querySelectorAll('.emby-tab-button:not([data-ratings-tab="true"])');
+            otherTabs.forEach((tab, index) => {
+                tab.addEventListener('click', function (e) {
+                    // Hide ratings tab
+                    const ratingsTabContent = document.querySelector('#ratingsTab');
+                    if (ratingsTabContent) {
+                        ratingsTabContent.style.display = 'none';
+                        ratingsTabContent.classList.add('hide');
+                    }
+
+                    // Show the home page
+                    const homePage = document.querySelector('[data-role="page"].hide:not(#ratingsTab)');
+                    if (homePage) {
+                        homePage.classList.remove('hide');
+                    }
+                }, true); // Use capture to run before Jellyfin's handler
+            });
 
             // Insert the tab
             tabsSlider.appendChild(ratingsTab);
-            
+
         } catch (error) {
             console.error('[UserRatings] Tab injection error:', error);
         }

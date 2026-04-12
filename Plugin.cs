@@ -37,13 +37,8 @@ namespace Jellyfin.Plugin.UserRatings
                     string scriptReplace = "<(script|link)[^>]*plugin=\"UserRatings\"[^>]*>(?:</script>)?";
                     string[] scripts = new[]
                     {
-                        "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=api.js\"></script>",
-                        "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=ui.js\"></script>",
-                        "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=container-detector.js\"></script>",
-                        "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=detail-page-injector.js\"></script>",
-                        "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=home-page-ratings.js\"></script>",
                         "<link plugin=\"UserRatings\" rel=\"stylesheet\" href=\"/web/ConfigurationPage?name=styles.css\">",
-                        "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=main.js\"></script>"
+                        "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=ratings.js\"></script>"
                     };
 
                     // Check if any scripts are already injected
