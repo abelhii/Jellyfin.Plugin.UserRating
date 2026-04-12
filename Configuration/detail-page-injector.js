@@ -1,13 +1,16 @@
 /**
  * Detail page injector module
  * Handles injection of ratings UI into item detail pages
- * Uses smart container detection instead of brittle retries
+ * Uses smart container detection with robust fallback mechanisms
  */
 
 const DetailPageInjector = {
     currentItemId: null,
     isInjecting: false,
     detector: null,
+    injectionAttempts: 0,
+    maxInjectionAttempts: 30,
+    hasTriedRefresh: false,
 
     /**
      * Extract item ID from URL
@@ -45,8 +48,26 @@ const DetailPageInjector = {
     },
 
     /**
-     * Main injection function
-     * Uses container detector for smarter detection
+     * Seamless page refresh as fallback
+     */
+    seamlessPageRefresh(force = false) {
+        if (!this.isOnDetailsPage()) {
+            console.log('[UserRatings] Not on details page, skipping refresh');
+            return;
+        }
+
+        if (!force && this.hasTriedRefresh) {
+            console.log('[UserRatings] Already tried refresh, skipping');
+            return;
+        }
+
+        console.log('[UserRatings] Performing page refresh', force ? '(FORCED)' : '');
+        this.hasTriedRefresh = true;
+        window.location.reload(true);
+    },
+
+    /**
+     * Main injection function with retry logic
      */
     async injectRatingsUI() {
         // Prevent concurrent injections
@@ -58,6 +79,7 @@ const DetailPageInjector = {
         const itemId = this.extractItemId();
         if (!itemId) {
             console.log('[UserRatings] No item ID found');
+            this.injectionAttempts = 0;
             return;
         }
 
@@ -65,6 +87,7 @@ const DetailPageInjector = {
         const existingUI = document.getElementById('user-ratings-ui');
         if (existingUI && this.currentItemId === itemId) {
             console.log('[UserRatings] UI already exists for this item');
+            this.injectionAttempts = 0;
             return;
         }
 
@@ -83,9 +106,9 @@ const DetailPageInjector = {
             // Use smart container detector
             if (!this.detector) {
                 this.detector = new ContainerDetector({
-                    timeout: 15000, // 15 seconds
-                    requireContent: false, // Don't require content - container may be empty initially
-                    minSize: { width: 0, height: 0 } // Just needs to exist and be visible
+                    timeout: 10000, // 10 seconds max
+                    requireContent: false,
+                    minSize: { width: 0, height: 0 }
                 });
             }
 
@@ -98,27 +121,96 @@ const DetailPageInjector = {
 
             // Inject into container
             targetContainer.appendChild(ui);
+            this.injectionAttempts = 0; // Reset on successful inject
 
             // Verify inject worked by checking if UI is visible
-            setTimeout(() => {
+            const checkSizeAndRefresh = (checkName) => {
                 const injectedUI = document.getElementById('user-ratings-ui');
-                if (injectedUI) {
-                    const rect = injectedUI.getBoundingClientRect();
-                    if (rect.width > 0 && rect.height > 0) {
-                        console.log('[UserRatings] ✓ UI successfully injected and visible');
-                        this.isInjecting = false;
-                    } else {
-                        console.warn('[UserRatings] UI injected but not visible, will retry on next page load');
-                        this.isInjecting = false;
+                if (!injectedUI) return false;
+
+                const rect = injectedUI.getBoundingClientRect();
+                const hasZeroSize = rect.width === 0 && rect.height === 0;
+
+                console.log(`[UserRatings] ${checkName} size check:`, rect.width, 'x', rect.height, hasZeroSize ? '(ZERO)' : '');
+
+                if (hasZeroSize) {
+                    const isFinalCheck = checkName === 'Final';
+                    if (isFinalCheck) {
+                        this.hasTriedRefresh = false; // Force refresh
                     }
+
+                    injectedUI.remove();
+                    this.isInjecting = false;
+                    this.seamlessPageRefresh(isFinalCheck);
+                    return true;
                 }
-            }, 500);
+
+                return false;
+            };
+
+            // Immediate check
+            setTimeout(() => {
+                if (!checkSizeAndRefresh('Immediate')) {
+                    this.isInjecting = false;
+                    console.log('[UserRatings] ✓ UI successfully injected');
+                }
+            }, 100);
+
+            // Check after async operations
+            setTimeout(() => {
+                checkSizeAndRefresh('Post-async');
+            }, 800);
+
+            // Final check
+            setTimeout(() => {
+                checkSizeAndRefresh('Final');
+            }, 1500);
 
         } catch (error) {
             console.error('[UserRatings] Error during injection:', error);
             this.isInjecting = false;
-            // Let it try again on next opportunity
+
+            // Retry with exponential backoff if container not found
+            if (this.injectionAttempts < this.maxInjectionAttempts) {
+                this.injectionAttempts++;
+                const retryDelay = Math.min(100 * Math.pow(1.5, this.injectionAttempts), 3000);
+                console.log(`[UserRatings] Retry ${this.injectionAttempts}/${this.maxInjectionAttempts} in ${retryDelay.toFixed(0)}ms`);
+                setTimeout(() => this.injectRatingsUI(), retryDelay);
+            } else {
+                console.log('[UserRatings] Max injection attempts reached, attempting refresh');
+                if (!this.hasTriedRefresh && itemId) {
+                    this.seamlessPageRefresh();
+                }
+            }
         }
+    },
+
+    /**
+     * Monitor for UI that becomes zero-sized
+     */
+    monitorUIVisibility() {
+        setInterval(() => {
+            if (!this.isOnDetailsPage() || this.hasTriedRefresh) {
+                return;
+            }
+
+            const ui = document.getElementById('user-ratings-ui');
+            if (ui && this.currentItemId) {
+                const rect = ui.getBoundingClientRect();
+                if (rect.width === 0 && rect.height === 0) {
+                    const parent = ui.parentElement;
+                    if (parent) {
+                        const parentRect = parent.getBoundingClientRect();
+                        if (parentRect.width > 0 || parentRect.height > 0) {
+                            console.log('[UserRatings] UI became zero-sized but parent visible, refreshing');
+                            ui.remove();
+                            this.isInjecting = false;
+                            this.seamlessPageRefresh();
+                        }
+                    }
+                }
+            }
+        }, 2000);
     },
 
     /**
@@ -132,6 +224,8 @@ const DetailPageInjector = {
 
         this.currentItemId = null;
         this.isInjecting = false;
+        this.injectionAttempts = 0;
+        this.hasTriedRefresh = false;
 
         if (this.detector) {
             this.detector.reset();
@@ -142,10 +236,13 @@ const DetailPageInjector = {
      * Initialize injection monitoring
      */
     init() {
-        // Initial attempts
+        // Initial attempts with delays
         setTimeout(() => this.injectRatingsUI(), 100);
         setTimeout(() => this.injectRatingsUI(), 300);
         setTimeout(() => this.injectRatingsUI(), 600);
+
+        // Start monitoring for UI visibility issues
+        this.monitorUIVisibility();
 
         // Listen for hash changes (navigation)
         window.addEventListener('hashchange', () => {

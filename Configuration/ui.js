@@ -246,6 +246,10 @@ const RatingsUI = {
         await this.displayAllRatings(itemId, container);
         console.log('[UserRatings] → All ratings loaded, returning container');
 
+        // Ensure container is visible before returning
+        container.style.display = 'block';
+        container.style.visibility = 'visible';
+
         return container;
     },
 

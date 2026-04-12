@@ -23,7 +23,7 @@
     /**
      * Wait for all modules to be available
      */
-    function waitForModules(callback, maxWait = 5000) {
+    function waitForModules(callback, maxWait = 10000) {
         const startTime = Date.now();
 
         const checkModules = () => {
@@ -36,8 +36,8 @@
             if (hasModules) {
                 callback();
             } else if (Date.now() - startTime < maxWait) {
-                // Retry every 100ms until timeout
-                setTimeout(checkModules, 100);
+                // Retry every 50ms until timeout
+                setTimeout(checkModules, 50);
             } else {
                 console.error('[UserRatings] Modules failed to load within timeout');
             }
