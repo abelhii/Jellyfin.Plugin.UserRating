@@ -1,5 +1,5 @@
 using Jellyfin.Plugin.UserRatings.Services;
-using MediaBrowser.Common.Plugins;
+using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jellyfin.Plugin.UserRatings
