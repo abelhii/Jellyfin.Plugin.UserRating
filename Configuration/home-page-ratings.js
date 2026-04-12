@@ -303,11 +303,11 @@ const HomePageRatings = {
             const cardId = `rating-card-${item.itemId}-${index}`;
 
             return `
-                <div id="${cardId}" class="card portraitCard card-hoverable" style="min-width: 150px; max-width: 250px; cursor: pointer;">
+                <div id="${cardId}" data-index="${index}" data-isfolder="false" data-serverid="${serverId}" data-id="${item.itemId}" data-type="${details.Type}" data-mediatype="Video" class="card portraitCard card-hoverable card-withuserdata" style="min-width: 150px; max-width: 250px;">
                     <div class="cardBox cardBox-bottompadded">
                         <div class="cardScalable">
                             <div class="cardPadder cardPadder-portrait"></div>
-                            <div class="cardImageContainer" aria-label="${title}" style="background-image: url('${imageUrl}'); cursor: pointer;"></div>
+                            <a href="#/details?id=${item.itemId}&serverId=${serverId}" data-action="link" class="cardImageContainer cardContent itemAction" aria-label="${title}" style="background-image: url('${imageUrl}');"></a>
                             <div class="cardIndicators cardIndicators-bottomright">
                                 <div style="background: rgba(0,0,0,0.85); padding: 0.4em 0.7em; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3em;">
                                     <span style="color: #ffd700; font-size: 1.1em;">★</span>
@@ -317,8 +317,11 @@ const HomePageRatings = {
                             </div>
                         </div>
                         <div class="cardText cardTextCentered cardText-first">
-                            <span title="${title}" style="cursor: pointer;">${title}</span>
+                            <bdi>
+                                <a href="#/details?id=${item.itemId}&serverId=${serverId}" data-id="${item.itemId}" data-serverid="${serverId}" data-type="${details.Type}" data-action="link" class="itemAction textActionButton" title="${title}">${title}</a>
+                            </bdi>
                         </div>
+                        <div class="cardText cardTextCentered">&nbsp;</div>
                     </div>
                 </div>
             `;

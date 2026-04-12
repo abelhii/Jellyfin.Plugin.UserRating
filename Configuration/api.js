@@ -9,7 +9,9 @@ const RatingsAPI = {
      */
     async loadRatings(itemId) {
         try {
-            const response = await fetch(ApiClient.getUrl(`api/UserRatings/Item/${itemId}`), {
+            // Add cache-busting parameter to ensure fresh data from backend
+            const timestamp = Date.now();
+            const response = await fetch(ApiClient.getUrl(`api/UserRatings/Item/${itemId}?_t=${timestamp}`), {
                 headers: {
                     'X-Emby-Token': ApiClient.accessToken()
                 }

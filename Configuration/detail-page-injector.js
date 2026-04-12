@@ -186,15 +186,32 @@ const DetailPageInjector = {
     },
 
     /**
-     * Monitor for UI that becomes zero-sized
+     * Monitor and continuously re-inject UI if missing
+     * Runs indefinitely to handle page refreshes and navigation
      */
     monitorUIVisibility() {
         setInterval(() => {
-            if (!this.isOnDetailsPage() || this.hasTriedRefresh) {
+            // Only monitor on detail pages
+            if (!this.isOnDetailsPage()) {
                 return;
             }
 
             const ui = document.getElementById('user-ratings-ui');
+            const currentItemId = this.extractItemId();
+
+            // If we're on a detail page but UI is missing or we're on a different item, try to inject
+            if (currentItemId && (!ui || this.currentItemId !== currentItemId)) {
+                if (!this.isInjecting) {
+                    console.log('[UserRatings] UI missing or item changed, re-injecting...');
+                    this.currentItemId = currentItemId;
+                    this.injectionAttempts = 0; // Reset attempts for new item
+                    this.hasTriedRefresh = false; // Reset refresh flag
+                    this.injectRatingsUI();
+                }
+                return;
+            }
+
+            // If UI exists, check if it's zero-sized
             if (ui && this.currentItemId) {
                 const rect = ui.getBoundingClientRect();
                 if (rect.width === 0 && rect.height === 0) {
@@ -205,12 +222,13 @@ const DetailPageInjector = {
                             console.log('[UserRatings] UI became zero-sized but parent visible, refreshing');
                             ui.remove();
                             this.isInjecting = false;
+                            this.injectionAttempts = 0;
                             this.seamlessPageRefresh();
                         }
                     }
                 }
             }
-        }, 2000);
+        }, 1000); // Check every 1 second for more responsiveness
     },
 
     /**

@@ -250,3 +250,17 @@
     color: #e0e0e0;
     line-height: 1.4;
 }
+
+/* Ensure card images display properly */
+.card-hoverable .cardImageContainer {
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+}
+
+.card-hoverable .cardPadder-portrait {
+    padding-bottom: 150%;
+}

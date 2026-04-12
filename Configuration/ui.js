@@ -179,6 +179,8 @@ const RatingsUI = {
                     saveBtn.disabled = false;
                 }, 2000);
 
+                // Allow backend to commit before reloading ratings
+                await new Promise(resolve => setTimeout(resolve, 300));
                 await this.displayAllRatings(itemId, container);
                 deleteBtn.style.display = 'inline-block';
             } else {
