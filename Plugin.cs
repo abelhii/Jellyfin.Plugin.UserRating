@@ -32,46 +32,28 @@ namespace Jellyfin.Plugin.UserRatings
                 if (File.Exists(indexFile))
                 {
                     string indexContents = File.ReadAllText(indexFile);
-
-                    // Regex to remove old scripts - catch both script tags and link tags with plugin="UserRatings"
-                    string scriptReplace = "<(script|link)[^>]*plugin=\"UserRatings\"[^>]*>(?:</script>)?";
-                    string[] scripts = new[]
+                    
+                    // Script to inject
+                    string scriptReplace = "<script plugin=\"UserRatings\".*?</script>";
+                    string scriptElement = "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=ratings.js\"></script>";
+                    
+                    if (!indexContents.Contains(scriptElement))
                     {
-                        "<link plugin=\"UserRatings\" rel=\"stylesheet\" href=\"/web/ConfigurationPage?name=styles.css\">",
-                        "<script plugin=\"UserRatings\" src=\"/web/ConfigurationPage?name=ratings.js\"></script>"
-                    };
-
-                    // Check if any scripts are already injected
-                    bool alreadyInjected = false;
-                    foreach (var script in scripts)
-                    {
-                        if (indexContents.Contains(script))
-                        {
-                            alreadyInjected = true;
-                            break;
-                        }
-                    }
-
-                    if (!alreadyInjected)
-                    {
-                        _logger.LogInformation("Injecting User Ratings plugin into {indexFile}", indexFile);
-
-                        // Remove old scripts (both old ratings.js and new plugin format)
+                        _logger.LogInformation("Injecting User Ratings script into {indexFile}", indexFile);
+                        
+                        // Remove old scripts
                         indexContents = Regex.Replace(indexContents, scriptReplace, "", RegexOptions.Singleline);
-                        // Also explicitly remove ratings.js if it exists with any format
-                        indexContents = Regex.Replace(indexContents, "<script[^>]*ratings\\.js[^>]*>(?:</script>)?", "", RegexOptions.Singleline);
-
-                        // Insert scripts before closing body tag
+                        
+                        // Insert script before closing body tag
                         int bodyClosing = indexContents.LastIndexOf("</body>");
                         if (bodyClosing != -1)
                         {
-                            string scriptElements = string.Join("\n    ", scripts);
-                            indexContents = indexContents.Insert(bodyClosing, "    " + scriptElements + "\n");
-
+                            indexContents = indexContents.Insert(bodyClosing, scriptElement);
+                            
                             try
                             {
                                 File.WriteAllText(indexFile, indexContents);
-                                _logger.LogInformation("Successfully injected User Ratings plugin");
+                                _logger.LogInformation("Successfully injected User Ratings script");
                             }
                             catch (Exception e)
                             {
@@ -81,7 +63,7 @@ namespace Jellyfin.Plugin.UserRatings
                     }
                     else
                     {
-                        _logger.LogInformation("User Ratings plugin already injected");
+                        _logger.LogInformation("User Ratings script already injected");
                     }
                 }
             }
@@ -100,41 +82,10 @@ namespace Jellyfin.Plugin.UserRatings
                 },
                 new PluginPageInfo
                 {
-                    Name = "api.js",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.api.js"
-                },
-                new PluginPageInfo
-                {
-                    Name = "ui.js",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.ui.js"
-                },
-                new PluginPageInfo
-                {
-                    Name = "container-detector.js",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.container-detector.js"
-                },
-                new PluginPageInfo
-                {
-                    Name = "detail-page-injector.js",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.detail-page-injector.js"
-                },
-                new PluginPageInfo
-                {
-                    Name = "home-page-ratings.js",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.home-page-ratings.js"
-                },
-                new PluginPageInfo
-                {
-                    Name = "styles.css",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.styles.css"
-                },
-                new PluginPageInfo
-                {
-                    Name = "main.js",
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.main.js"
+                    Name = "ratings.js",
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.ratings.js"
                 }
             };
         }
     }
 }
-
