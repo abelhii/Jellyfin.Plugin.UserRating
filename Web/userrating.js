@@ -649,7 +649,7 @@
             const stars = document.createElement('span');
             stars.className = 'rating-item-stars';
             const ratingValue = rating.rating || rating.Rating || 0;
-            stars.textContent = '★'.repeat(ratingValue) + '☆'.repeat(5 - ratingValue);
+            stars.textContent = '★'.repeat(ratingValue) + '☆'.repeat(10 - ratingValue);
             leftSide.appendChild(stars);
 
             header.appendChild(leftSide);
@@ -1215,7 +1215,7 @@
             }).join('');
 
             // Build sections HTML matching native Jellyfin structure with explicit spacing
-            let sectionsHTML = '<div class="readOnlyContent" style="padding-top: 4em;">';
+            let sectionsHTML = '<div style="padding-top: 4em;">';
 
             if (recentMovies.length > 0) {
                 sectionsHTML += `
