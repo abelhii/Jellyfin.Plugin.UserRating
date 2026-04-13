@@ -820,24 +820,27 @@
         e.preventDefault();
         e.stopPropagation();
 
-        // Deactivate all tab buttons in this slider
+        // Deactivate all tab buttons
         tabsSlider.querySelectorAll('.emby-tab-button').forEach(tab => {
           tab.classList.remove('emby-tab-button-active');
         });
         ratingsTab.classList.add('emby-tab-button-active');
 
-        // Hide all tab content panels inside the SAME indexPage
-        // (use the parent of our content panel to be safe)
+        // Only remove is-active from sibling panels — do NOT set inline
+        // display:none on them. Jellyfin's own CSS handles hiding panels
+        // that lack is-active. Forcing inline styles breaks native tab
+        // switching because Jellyfin can't undo our inline override.
         const parentPage = ratingsTabContent.parentElement;
         if (parentPage) {
           parentPage.querySelectorAll('.pageTabContent').forEach(panel => {
-            panel.style.display = 'none';
-            panel.classList.remove('is-active');
-            panel.classList.add('hide');
+            if (panel !== ratingsTabContent) {
+              panel.classList.remove('is-active');
+            }
           });
         }
 
-        // Show our ratings tab content
+        // Show our panel (we need inline display since Jellyfin doesn't
+        // manage this panel natively)
         ratingsTabContent.classList.remove('hide');
         ratingsTabContent.classList.add('is-active');
         ratingsTabContent.style.display = '';
@@ -849,7 +852,7 @@
         }
       });
 
-      // When any OTHER tab button in this slider is clicked, hide our content
+      // When a native tab is clicked, hide only our custom panel
       tabsSlider.querySelectorAll('.emby-tab-button:not([data-ratings-tab="true"])').forEach(tab => {
         tab.addEventListener('click', function () {
           ratingsTabContent.style.display = 'none';
