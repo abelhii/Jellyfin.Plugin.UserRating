@@ -227,6 +227,108 @@
   let currentRating = 0;
   let isInjecting = false;
 
+  // =========================================================================
+  // Centralized debounce timers (replaces scattered setTimeout chains)
+  // =========================================================================
+  let detailInjectionTimer = null;
+  let tabInjectionTimer = null;
+
+  function scheduleDetailInjection(delay = 150) {
+    clearTimeout(detailInjectionTimer);
+    detailInjectionTimer = setTimeout(() => {
+      injectRatingsUI();
+    }, delay);
+  }
+
+  function scheduleTabInjection(delay = 200) {
+    clearTimeout(tabInjectionTimer);
+    tabInjectionTimer = setTimeout(() => {
+      injectRatingsTab();
+    }, delay);
+  }
+
+  // =========================================================================
+  // Concurrency-limited fetch helper (caps parallel API requests)
+  // =========================================================================
+  async function fetchWithConcurrency(items, fetchFn, concurrency = 6) {
+    const results = new Array(items.length);
+    let index = 0;
+
+    async function worker() {
+      while (index < items.length) {
+        const i = index++;
+        try {
+          results[i] = await fetchFn(items[i]);
+        } catch {
+          results[i] = null;
+        }
+      }
+    }
+
+    await Promise.all(
+      Array.from({ length: Math.min(concurrency, items.length) }, () => worker())
+    );
+    return results.filter(Boolean);
+  }
+
+  // =========================================================================
+  // Helper: Get the data-index for the ratings tab button.
+  // Counts existing tab buttons, but also accounts for CustomTabs plugin
+  // buttons which use data-index starting at 2 (0=Home, 1=Favorites).
+  // We place our tab AFTER all existing buttons.
+  // =========================================================================
+  function getNextTabIndex(tabsSlider) {
+    const allButtons = tabsSlider.querySelectorAll('.emby-tab-button');
+    let maxIndex = -1;
+    allButtons.forEach(btn => {
+      const idx = parseInt(btn.getAttribute('data-index'), 10);
+      if (!isNaN(idx) && idx > maxIndex) maxIndex = idx;
+    });
+    // If no buttons found, default to index 2 (after Home=0, Favorites=1)
+    return maxIndex >= 0 ? maxIndex + 1 : allButtons.length;
+  }
+
+  // =========================================================================
+  // Helper: Ensure the ratingsTab content panel exists INSIDE #indexPage,
+  // following the same pattern as CustomTabs:
+  //   <div class="tabContent pageTabContent" id="ratingsTab" data-index="N">
+  // This places it as a sibling of #homeTab, #favoritesTab, #customTab_0, etc.
+  // =========================================================================
+  function ensureRatingsTabContent(dataIndex) {
+    let content = document.querySelector('#ratingsTab');
+    if (content) {
+      // Update data-index in case it changed (e.g., tabs were added/removed)
+      content.setAttribute('data-index', dataIndex);
+      return content;
+    }
+
+    // Find #indexPage — the container that holds all tab content panels
+    const indexPage = document.querySelector('#indexPage');
+    if (!indexPage) {
+      console.warn('[UserRatings] #indexPage not found, cannot create tab content');
+      return null;
+    }
+
+    content = document.createElement('div');
+    content.className = 'tabContent pageTabContent';
+    content.id = 'ratingsTab';
+    content.setAttribute('data-index', dataIndex);
+    // Start hidden — Jellyfin's tab system will show/hide based on active tab
+    content.style.display = 'none';
+
+    // Insert inside indexPage, after the last existing tabContent panel
+    // (which will be after favoritesTab and any customTab_N panels)
+    const lastTabContent = indexPage.querySelector('.pageTabContent:last-of-type');
+    if (lastTabContent && lastTabContent.nextSibling) {
+      indexPage.insertBefore(content, lastTabContent.nextSibling);
+    } else {
+      indexPage.appendChild(content);
+    }
+
+    console.log(`[UserRatings] ✓ Created ratingsTab content panel inside #indexPage with data-index=${dataIndex}`);
+    return content;
+  }
+
   function createStarRating(rating, interactive, onHover, onClick) {
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'display:inline-flex;align-items:center;gap:0.5em;';
@@ -428,7 +530,6 @@
     charCount.textContent = '0 characters';
     reviewSection.appendChild(charCount);
 
-    // Character counter
     noteInput.addEventListener('input', () => {
       const length = noteInput.value.length;
       charCount.textContent = `${length} character${length !== 1 ? 's' : ''}`;
@@ -629,7 +730,6 @@
         const retryDelay = Math.min(100 * Math.pow(1.5, injectionAttempts), 3000);
         setTimeout(injectRatingsUI, retryDelay);
       } else {
-        // Give up cleanly — no refresh
         console.log('[UserRatings] Max injection attempts reached, giving up');
         injectionAttempts = 0;
         isInjecting = false;
@@ -652,164 +752,86 @@
     });
   }
 
-  // Watch for navigation and DOM changes
-  let lastUrl = location.href;
-  new MutationObserver((mutations) => {
-    const url = location.href;
-    if (url !== lastUrl) {
-      lastUrl = url;
-
-      const oldUI = document.getElementById('user-ratings-ui');
-      if (oldUI) oldUI.remove();
-
-      const ratingsTabContent = document.querySelector('#ratingsTab');
-      if (ratingsTabContent) {
-        ratingsTabContent.style.display = 'none';
-        ratingsTabContent.classList.add('hide');
-      }
-
-      isInjecting = false;
-      injectionAttempts = 0;
-      currentItemId = null;
-
-      setTimeout(injectRatingsUI, 150);
-      return;
-    }
-
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node.nodeType === 1) {
-          if (node.classList && (
-            node.classList.contains('detailPagePrimaryContent') ||
-            node.classList.contains('detailSection') ||
-            node.classList.contains('itemDetailPage')
-          )) {
-            isInjecting = false;
-            injectionAttempts = 0;
-            setTimeout(injectRatingsUI, 100);
-            return;
-          }
-          if (node.querySelector && (
-            node.querySelector('.detailPagePrimaryContent') ||
-            node.querySelector('.detailSection') ||
-            node.querySelector('.itemDetailPage')
-          )) {
-            isInjecting = false;
-            injectionAttempts = 0;
-            setTimeout(injectRatingsUI, 100);
-            return;
-          }
-        }
-      }
-    }
-  }).observe(document.body, { subtree: true, childList: true });
-
-  window.addEventListener('hashchange', () => {
-    const oldUI = document.getElementById('user-ratings-ui');
-    if (oldUI) oldUI.remove();
-
-    const ratingsTab = document.querySelector('#ratingsTab');
-    const currentHash = window.location.hash;
-    if (ratingsTab) {
-      if (!currentHash.includes('home')) {
-        ratingsTab.style.display = 'none';
-        ratingsTab.classList.add('hide');
-      } else {
-        ratingsTab.style.display = 'none';
-        ratingsTab.classList.add('hide');
-        const allPages = document.querySelectorAll('[data-role="page"]');
-        allPages.forEach(page => {
-          if (page.id === 'ratingsTab' || !page.classList.contains('homePage')) {
-            page.classList.add('hide');
-            page.style.display = 'none';
-          }
-        });
-        const homePage = document.querySelector('[data-role="page"].homePage:not(#ratingsTab)');
-        if (homePage) {
-          homePage.classList.remove('hide');
-          homePage.style.display = '';
-        }
-      }
-    }
-
-    isInjecting = false;
-    injectionAttempts = 0;
-    currentItemId = null;
-    setTimeout(injectRatingsUI, 100);
-    setTimeout(injectRatingsUI, 300);
-  });
-
-  // Initial injection attempts
-  setTimeout(injectRatingsUI, 100);
-  setTimeout(injectRatingsUI, 300);
-  setTimeout(injectRatingsUI, 600);
-
-  // Home tab injection (unchanged)
+  // =========================================================================
+  // Tab button injection — creates the "User Ratings" tab button in the
+  // tabs slider, and its content panel INSIDE #indexPage using the same
+  // <div class="tabContent pageTabContent"> pattern as CustomTabs.
+  // =========================================================================
   function injectRatingsTab() {
     try {
       if (!window.location.hash.includes('home')) return;
       if (document.querySelector('[data-ratings-tab="true"]')) return;
 
-      const homeButton = Array.from(document.querySelectorAll('.emby-tab-button')).find(btn =>
-        btn.textContent.trim().toLowerCase().includes('home')
-      );
-      const tabsSlider = homeButton ? homeButton.parentElement : document.querySelector('.emby-tabs-slider');
+      const tabsSlider = document.querySelector('.emby-tabs-slider');
       if (!tabsSlider) return;
 
-      const nextIndex = tabsSlider.querySelectorAll('.emby-tab-button').length;
+      // Compute our tab index — after all existing tabs (Home, Favorites, CustomTabs...)
+      const ratingsTabIndex = getNextTabIndex(tabsSlider);
+
+      // --- Create the content panel INSIDE #indexPage ---
+      const ratingsTabContent = ensureRatingsTabContent(ratingsTabIndex);
+      if (!ratingsTabContent) return; // #indexPage not ready yet
+
+      // --- Create the tab button ---
       const ratingsTab = document.createElement('button');
       ratingsTab.type = 'button';
       ratingsTab.setAttribute('is', 'emby-button');
       ratingsTab.className = 'emby-tab-button emby-button';
-      ratingsTab.setAttribute('data-index', nextIndex);
+      ratingsTab.setAttribute('data-index', ratingsTabIndex);
       ratingsTab.setAttribute('data-ratings-tab', 'true');
       ratingsTab.innerHTML = '<div class="emby-button-foreground">User Ratings</div>';
 
       ratingsTab.addEventListener('click', async function (e) {
         e.preventDefault();
-        tabsSlider.querySelectorAll('.emby-tab-button').forEach(tab => tab.classList.remove('emby-tab-button-active'));
+        e.stopPropagation();
+
+        // Deactivate all other tab buttons
+        tabsSlider.querySelectorAll('.emby-tab-button').forEach(tab => {
+          tab.classList.remove('emby-tab-button-active');
+        });
         ratingsTab.classList.add('emby-tab-button-active');
-        try { await displayRatingsList(); }
-        catch (error) { console.error('[UserRatings] Error in displayRatingsList:', error); }
+
+        // Hide all other tab content panels inside #indexPage
+        const indexPage = document.querySelector('#indexPage');
+        if (indexPage) {
+          indexPage.querySelectorAll('.pageTabContent').forEach(panel => {
+            panel.style.display = 'none';
+            panel.classList.add('hide');
+          });
+        }
+
+        // Show our ratings tab content
+        ratingsTabContent.classList.remove('hide');
+        ratingsTabContent.style.display = 'block';
+
+        // Load content
+        try {
+          await displayRatingsList(ratingsTabContent);
+        } catch (error) {
+          console.error('[UserRatings] Error in displayRatingsList:', error);
+        }
       });
 
+      // When any OTHER tab is clicked, hide our content panel
       tabsSlider.querySelectorAll('.emby-tab-button:not([data-ratings-tab="true"])').forEach(tab => {
         tab.addEventListener('click', function () {
-          const ratingsTabContent = document.querySelector('#ratingsTab');
-          if (ratingsTabContent) {
-            ratingsTabContent.style.display = 'none';
-            ratingsTabContent.classList.add('hide');
-          } 
-          
-          const homePage = document.querySelector('[data-role="page"].hide:not(#ratingsTab)');
-          if (homePage) homePage.classList.remove('hide');
+          ratingsTabContent.style.display = 'none';
+          ratingsTabContent.classList.add('hide');
         }, true);
       });
 
       tabsSlider.appendChild(ratingsTab);
+      console.log(`[UserRatings] ✓ Ratings tab button injected with data-index=${ratingsTabIndex}`);
     } catch (error) {
       console.error('[UserRatings] Tab injection error:', error);
     }
   }
 
-  async function displayRatingsList() {
-    let ratingsTabContent = document.querySelector('#ratingsTab');
-    if (!ratingsTabContent) {
-      const homePage = document.querySelector('[data-role="page"]:not(.hide)');
-      if (!homePage) { console.error('[UserRatings] Could not find home page'); return; }
-      ratingsTabContent = document.createElement('div');
-      ratingsTabContent.id = 'ratingsTab';
-      ratingsTabContent.className = 'page libraryPage hide';
-      ratingsTabContent.setAttribute('data-role', 'page');
-      ratingsTabContent.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;overflow:auto;';
-      homePage.parentNode.appendChild(ratingsTabContent);
-    }
-
-    const homePage = document.querySelector('[data-role="page"]:not(.hide):not(#ratingsTab)');
-    if (homePage) homePage.classList.add('hide');
-    ratingsTabContent.classList.remove('hide');
-    ratingsTabContent.style.display = 'block';
-    ratingsTabContent.style.pointerEvents = 'auto';
+  // =========================================================================
+  // displayRatingsList — now accepts the content container as a parameter
+  // instead of creating/finding an orphaned div
+  // =========================================================================
+  async function displayRatingsList(ratingsTabContent) {
     ratingsTabContent.innerHTML = '<div style="padding: 3em 2em; text-align: center; color: rgba(255,255,255,0.6);">Loading ratings...</div>';
 
     try {
@@ -821,16 +843,22 @@
       const items = ratingsData.items || [];
 
       if (items.length === 0) {
-        ratingsTabContent.innerHTML = `<div style="padding:4em 2em;text-align:center;"><div style="font-size:4em;margin-bottom:0.5em;opacity:0.3;">★</div><div style="font-size:1.2em;color:rgba(255,255,255,0.6);">No rated items yet</div></div>`;
+        ratingsTabContent.innerHTML = `<div style="padding:4em 2em;text-align:center;">
+          <div style="font-size:4em;margin-bottom:0.5em;opacity:0.3;">★</div>
+          <div style="font-size:1.2em;color:rgba(255,255,255,0.6);">No rated items yet</div>
+        </div>`;
         return;
       }
 
-      const itemsWithDetails = (await Promise.all(items.map(async item => {
-        try {
+      // Concurrency-limited item detail fetching
+      const itemsWithDetails = await fetchWithConcurrency(
+        items,
+        async (item) => {
           const details = await ApiClient.getItem(ApiClient.getCurrentUserId(), item.itemId);
           return { ...item, details };
-        } catch { return null; }
-      }))).filter(Boolean);
+        },
+        6
+      );
 
       if (itemsWithDetails.length === 0) {
         ratingsTabContent.innerHTML = `<div style="padding:4em 2em;text-align:center;"><div style="font-size:1.2em;color:rgba(255,255,255,0.6);">Could not load item details</div></div>`;
@@ -862,12 +890,13 @@
         const count = item.totalRatings;
         const serverId = ApiClient.serverId();
         return `
-                    <div data-index="0" data-isfolder="false" data-serverid="${serverId}" data-id="${item.itemId}" data-type="${details.Type}" data-mediatype="Video" class="card portraitCard card-hoverable card-withuserdata" style="min-width:150px;max-width:250px;">
+                    <div data-index="0" data-isfolder="false" data-serverid="${serverId}" data-id="${item.itemId}" data-type="${details.Type}" data-mediatype="Video" class="card portraitCard card-hoverable">
                         <div class="cardBox cardBox-bottompadded">
                             <div class="cardScalable">
                                 <div class="cardPadder cardPadder-portrait"></div>
                                 <canvas aria-hidden="true" width="20" height="20" class="blurhash-canvas lazy-hidden"></canvas>
-                                <a href="#/details?id=${item.itemId}&serverId=${serverId}" data-action="link" class="cardImageContainer coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast" aria-label="${title}" style="background-image:url('${imageUrl}');"></a>
+                                <a href="#/details?id=${item.itemId}&serverId=${serverId}" data-action="link" class="cardImageContainer coveredImage cardContent itemAction lazy blurhashed lazy-image-fadein-fast" style="background-image:url('${imageUrl}');">
+                                </a>
                                 <div class="cardIndicators cardIndicators-bottomright">
                                     <div style="background:rgba(0,0,0,0.85);padding:0.4em 0.7em;border-radius:4px;display:inline-flex;align-items:center;gap:0.3em;">
                                         <span style="color:#ffd700;font-size:1.1em;">★</span>
@@ -876,7 +905,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="cardText cardTextCentered cardText-first"><bdi><a href="#/details?id=${item.itemId}&serverId=${serverId}" data-id="${item.itemId}" data-serverid="${serverId}" data-type="${details.Type}" data-action="link" class="itemAction textActionButton" title="${title}">${title}</a></bdi></div>
+                            <div class="cardText cardTextCentered cardText-first"><bdi><a href="#/details?id=${item.itemId}&serverId=${serverId}" data-id="${item.itemId}" data-serverid="${serverId}" data-action="link" class="cardImageContainer itemAction">${title}</a></bdi></div>
                             <div class="cardText cardTextCentered">&nbsp;</div>
                         </div>
                     </div>`;
@@ -892,7 +921,7 @@
                     </div>
                 </div>`;
 
-      let sectionsHTML = `<div style="padding-top:4em;">
+      let sectionsHTML = `<div style="padding-top:1em;">
                 ${buildSection('Recently Rated Movies', movies)}
                 ${buildSection('Recently Rated Shows', series)}
                 ${buildSection('Recently Rated Episodes', episodes)}
@@ -900,7 +929,6 @@
             </div>`;
 
       ratingsTabContent.innerHTML = sectionsHTML;
-      ratingsTabContent.style.pointerEvents = 'auto';
 
       let currentPage = 1;
       const itemsPerPage = 24;
@@ -924,7 +952,7 @@
         const startItem = startIndex + 1;
         const endItem = Math.min(startIndex + itemsPerPage, allItems.length);
 
-        const allItemsSection = document.querySelector('#allItemsSection');
+        const allItemsSection = ratingsTabContent.querySelector('#allItemsSection');
         if (!allItemsSection) return;
         allItemsSection.innerHTML = `
                     <div class="verticalSection">
@@ -935,8 +963,8 @@
                             <div class="paging"><div class="listPaging">
                                 <span style="vertical-align:middle;">${startItem}-${endItem} of ${allItems.length}</span>
                                 <div style="display:inline-block;">
-                                    <button is="paper-icon-button-light" id="prevPage" class="btnPreviousPage autoSize paper-icon-button-light" ${page === 1 ? 'disabled' : ''}><span class="material-icons arrow_back" aria-hidden="true"></span></button>
-                                    <button is="paper-icon-button-light" id="nextPage" class="btnNextPage autoSize paper-icon-button-light" ${page === totalPages ? 'disabled' : ''}><span class="material-icons arrow_forward" aria-hidden="true"></span></button>
+                                    <button is="paper-icon-button-light" id="prevPage" class="btnPreviousPage autoSize paper-icon-button-light" ${page === 1 ? 'disabled' : ''}><span class="material-icons chevron_left"></span></button>
+                                    <button is="paper-icon-button-light" id="nextPage" class="btnNextPage autoSize paper-icon-button-light" ${page === totalPages ? 'disabled' : ''}><span class="material-icons chevron_right"></span></button>
                                 </div>
                             </div></div>
                             <select is="emby-select" id="sortSelect" class="emby-select-withcolor emby-select" style="width:auto;">
@@ -955,12 +983,12 @@
                         </div>
                     </div>`;
 
-        document.querySelector('#sortSelect')?.addEventListener('change', e => {
+        ratingsTabContent.querySelector('#sortSelect')?.addEventListener('change', e => {
           currentSort = e.target.value; currentPage = 1; renderAllItemsSection(currentPage, currentSort);
         });
-        const prevBtn = document.querySelector('#prevPage');
+        const prevBtn = ratingsTabContent.querySelector('#prevPage');
         if (prevBtn && !prevBtn.disabled) prevBtn.addEventListener('click', () => { currentPage--; renderAllItemsSection(currentPage, currentSort); allItemsSection.scrollIntoView({ behavior: 'smooth' }); });
-        const nextBtn = document.querySelector('#nextPage');
+        const nextBtn = ratingsTabContent.querySelector('#nextPage');
         if (nextBtn && !nextBtn.disabled) nextBtn.addEventListener('click', () => { currentPage++; renderAllItemsSection(currentPage, currentSort); allItemsSection.scrollIntoView({ behavior: 'smooth' }); });
       };
 
@@ -972,21 +1000,82 @@
     }
   }
 
-  injectRatingsTab();
-  setTimeout(injectRatingsTab, 100);
-  setTimeout(injectRatingsTab, 500);
-  setTimeout(injectRatingsTab, 1000);
-  setTimeout(injectRatingsTab, 2000);
-  setTimeout(injectRatingsTab, 3000);
-  setInterval(injectRatingsTab, 2000);
+  // =========================================================================
+  // Single unified MutationObserver + navigation handling
+  // =========================================================================
+  function cleanupOnNavigate() {
+    const oldUI = document.getElementById('user-ratings-ui');
+    if (oldUI) oldUI.remove();
+
+    // Hide the ratings tab content panel (don't remove it — it lives in #indexPage)
+    const ratingsTabContent = document.querySelector('#ratingsTab');
+    if (ratingsTabContent) {
+      ratingsTabContent.style.display = 'none';
+      ratingsTabContent.classList.add('hide');
+    }
+
+    isInjecting = false;
+    injectionAttempts = 0;
+    currentItemId = null;
+  }
+
+  let lastUrl = location.href;
+
+  new MutationObserver((mutations) => {
+    const url = location.href;
+
+    if (url !== lastUrl) {
+      lastUrl = url;
+      cleanupOnNavigate();
+
+      scheduleDetailInjection(150);
+
+      if (url.includes('home')) {
+        scheduleTabInjection(200);
+      }
+      return;
+    }
+
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType !== 1) continue;
+
+        const cl = node.classList;
+        if (!cl) continue;
+
+        if (cl.contains('detailPagePrimaryContent') ||
+          cl.contains('detailSection') ||
+          cl.contains('itemDetailPage')) {
+          isInjecting = false;
+          injectionAttempts = 0;
+          scheduleDetailInjection(100);
+          return;
+        }
+
+        if (cl.contains('emby-tabs-slider') &&
+          !document.querySelector('[data-ratings-tab="true"]')) {
+          scheduleTabInjection(100);
+          return;
+        }
+      }
+    }
+  }).observe(document.body, { subtree: true, childList: true });
 
   window.addEventListener('hashchange', () => {
-    setTimeout(injectRatingsTab, 100);
-    setTimeout(injectRatingsTab, 500);
+    cleanupOnNavigate();
+
+    const currentHash = window.location.hash;
+
+    scheduleDetailInjection(150);
+    if (currentHash.includes('home')) {
+      scheduleTabInjection(200);
+    }
   });
 
-  new MutationObserver(() => {
-    injectRatingsTab();
-  }).observe(document.body, { subtree: true, childList: true });
+  // Initial injection
+  scheduleDetailInjection(100);
+  scheduleTabInjection(200);
+
+  console.log('[UserRatings] Plugin setup complete');
 
 })();
