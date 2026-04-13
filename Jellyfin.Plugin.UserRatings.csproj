@@ -13,8 +13,8 @@
     <TargetFramework Condition="'$(JellyfinVersion)' == '10.10.7'">net8.0</TargetFramework>
     <TargetFramework Condition="$(JellyfinVersion.StartsWith('10.9'))">net8.0</TargetFramework>
 
-    <AssemblyVersion>2.0.6.0</AssemblyVersion>
-    <FileVersion>2.0.6.0</FileVersion>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
     <AssemblyName>Jellyfin.Plugin.UserRatings</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.UserRatings</RootNamespace>
     <Nullable>enable</Nullable>
