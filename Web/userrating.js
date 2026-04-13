@@ -228,7 +228,7 @@
   let isInjecting = false;
 
   // =========================================================================
-  // Centralized debounce timers (replaces scattered setTimeout chains)
+  // Centralized debounce timers
   // =========================================================================
   let detailInjectionTimer = null;
   let tabInjectionTimer = null;
@@ -248,7 +248,7 @@
   }
 
   // =========================================================================
-  // Concurrency-limited fetch helper (caps parallel API requests)
+  // Concurrency-limited fetch helper
   // =========================================================================
   async function fetchWithConcurrency(items, fetchFn, concurrency = 6) {
     const results = new Array(items.length);
@@ -272,10 +272,55 @@
   }
 
   // =========================================================================
-  // Helper: Get the data-index for the ratings tab button.
-  // Counts existing tab buttons, but also accounts for CustomTabs plugin
-  // buttons which use data-index starting at 2 (0=Home, 1=Favorites).
-  // We place our tab AFTER all existing buttons.
+  // KEY FIX: Find the ACTIVE #indexPage (not the stale cached one).
+  //
+  // Jellyfin uses data-dom-cache="true" and keeps old page copies in the DOM
+  // with class "hide". There can be TWO #indexPage divs simultaneously:
+  //   - The stale one (has class "hide")
+  //   - The active one (does NOT have class "hide")
+  //
+  // document.querySelector('#indexPage') always returns the FIRST one in DOM
+  // order, which is typically the stale/hidden copy. We must find the active one.
+  // =========================================================================
+  function getActiveIndexPage() {
+    const allIndexPages = document.querySelectorAll('#indexPage');
+    for (const page of allIndexPages) {
+      // The active page is the one WITHOUT the "hide" class
+      if (!page.classList.contains('hide')) {
+        return page;
+      }
+    }
+    // Fallback: if none found without "hide", return the last one
+    // (which is typically the most recently created)
+    if (allIndexPages.length > 0) {
+      return allIndexPages[allIndexPages.length - 1];
+    }
+    return null;
+  }
+
+  // =========================================================================
+  // Get the correct tabs slider from the ACTIVE indexPage
+  // =========================================================================
+  function getActiveTabsSlider() {
+    const indexPage = getActiveIndexPage();
+    if (indexPage) {
+      // Try to find the slider within this specific indexPage first
+      const slider = indexPage.querySelector('.emby-tabs-slider');
+      if (slider) return slider;
+    }
+    // Fallback: find a visible slider (not inside a hidden parent)
+    const allSliders = document.querySelectorAll('.emby-tabs-slider');
+    for (const slider of allSliders) {
+      const parentPage = slider.closest('#indexPage');
+      if (!parentPage || !parentPage.classList.contains('hide')) {
+        return slider;
+      }
+    }
+    return null;
+  }
+
+  // =========================================================================
+  // Get the data-index for the ratings tab button
   // =========================================================================
   function getNextTabIndex(tabsSlider) {
     const allButtons = tabsSlider.querySelectorAll('.emby-tab-button');
@@ -284,40 +329,29 @@
       const idx = parseInt(btn.getAttribute('data-index'), 10);
       if (!isNaN(idx) && idx > maxIndex) maxIndex = idx;
     });
-    // If no buttons found, default to index 2 (after Home=0, Favorites=1)
     return maxIndex >= 0 ? maxIndex + 1 : allButtons.length;
   }
 
   // =========================================================================
-  // Helper: Ensure the ratingsTab content panel exists INSIDE #indexPage,
+  // Ensure the ratingsTab content panel exists inside the ACTIVE #indexPage,
   // following the same pattern as CustomTabs:
   //   <div class="tabContent pageTabContent" id="ratingsTab" data-index="N">
-  // This places it as a sibling of #homeTab, #favoritesTab, #customTab_0, etc.
   // =========================================================================
-  function ensureRatingsTabContent(dataIndex) {
-    let content = document.querySelector('#ratingsTab');
+  function ensureRatingsTabContent(indexPage, dataIndex) {
+    // Check if this specific indexPage already has a ratingsTab
+    let content = indexPage.querySelector('#ratingsTab');
     if (content) {
-      // Update data-index in case it changed (e.g., tabs were added/removed)
       content.setAttribute('data-index', dataIndex);
       return content;
-    }
-
-    // Find #indexPage — the container that holds all tab content panels
-    const indexPage = document.querySelector('#indexPage');
-    if (!indexPage) {
-      console.warn('[UserRatings] #indexPage not found, cannot create tab content');
-      return null;
     }
 
     content = document.createElement('div');
     content.className = 'tabContent pageTabContent';
     content.id = 'ratingsTab';
     content.setAttribute('data-index', dataIndex);
-    // Start hidden — Jellyfin's tab system will show/hide based on active tab
     content.style.display = 'none';
 
-    // Insert inside indexPage, after the last existing tabContent panel
-    // (which will be after favoritesTab and any customTab_N panels)
+    // Insert after the last existing tabContent panel
     const lastTabContent = indexPage.querySelector('.pageTabContent:last-of-type');
     if (lastTabContent && lastTabContent.nextSibling) {
       indexPage.insertBefore(content, lastTabContent.nextSibling);
@@ -325,7 +359,7 @@
       indexPage.appendChild(content);
     }
 
-    console.log(`[UserRatings] ✓ Created ratingsTab content panel inside #indexPage with data-index=${dataIndex}`);
+    console.log(`[UserRatings] ✓ Created ratingsTab inside active #indexPage with data-index=${dataIndex}`);
     return content;
   }
 
@@ -469,11 +503,9 @@
     header.appendChild(avgSpan);
     container.appendChild(header);
 
-    // My Rating Section
     const myRatingSection = document.createElement('div');
     myRatingSection.className = 'user-ratings-my-rating';
 
-    // Star Rating Section
     const starSection = document.createElement('div');
     starSection.className = 'rating-form-section';
 
@@ -506,7 +538,6 @@
     starSection.appendChild(starRatingContainer);
     myRatingSection.appendChild(starSection);
 
-    // Review Text Section
     const reviewSection = document.createElement('div');
     reviewSection.className = 'rating-form-section';
 
@@ -537,7 +568,6 @@
 
     myRatingSection.appendChild(reviewSection);
 
-    // Actions
     const actionsContainer = document.createElement('div');
     actionsContainer.className = 'rating-actions';
 
@@ -588,13 +618,11 @@
     myRatingSection.appendChild(actionsContainer);
     container.appendChild(myRatingSection);
 
-    // All Ratings Section
     const allRatingsSection = document.createElement('div');
     allRatingsSection.className = 'user-ratings-all';
     allRatingsSection.id = 'all-ratings-section';
     container.appendChild(allRatingsSection);
 
-    // Load existing rating
     const myRating = await loadMyRating(itemId);
     if (myRating && myRating.rating) {
       currentRating = myRating.rating;
@@ -753,26 +781,33 @@
   }
 
   // =========================================================================
-  // Tab button injection — creates the "User Ratings" tab button in the
-  // tabs slider, and its content panel INSIDE #indexPage using the same
-  // <div class="tabContent pageTabContent"> pattern as CustomTabs.
+  // Tab button injection
   // =========================================================================
   function injectRatingsTab() {
     try {
       if (!window.location.hash.includes('home')) return;
-      if (document.querySelector('[data-ratings-tab="true"]')) return;
 
-      const tabsSlider = document.querySelector('.emby-tabs-slider');
+      // Find the ACTIVE tabs slider (not one inside a stale cached page)
+      const tabsSlider = getActiveTabsSlider();
       if (!tabsSlider) return;
 
-      // Compute our tab index — after all existing tabs (Home, Favorites, CustomTabs...)
+      // Check if THIS specific slider already has our tab button
+      if (tabsSlider.querySelector('[data-ratings-tab="true"]')) return;
+
+      // Find the ACTIVE indexPage to inject our content panel into
+      const indexPage = getActiveIndexPage();
+      if (!indexPage) {
+        console.debug('[UserRatings] Active #indexPage not found yet');
+        return;
+      }
+
       const ratingsTabIndex = getNextTabIndex(tabsSlider);
 
-      // --- Create the content panel INSIDE #indexPage ---
-      const ratingsTabContent = ensureRatingsTabContent(ratingsTabIndex);
-      if (!ratingsTabContent) return; // #indexPage not ready yet
+      // Create content panel inside the ACTIVE #indexPage
+      const ratingsTabContent = ensureRatingsTabContent(indexPage, ratingsTabIndex);
+      if (!ratingsTabContent) return;
 
-      // --- Create the tab button ---
+      // Create the tab button
       const ratingsTab = document.createElement('button');
       ratingsTab.type = 'button';
       ratingsTab.setAttribute('is', 'emby-button');
@@ -785,26 +820,28 @@
         e.preventDefault();
         e.stopPropagation();
 
-        // Deactivate all other tab buttons
+        // Deactivate all tab buttons in this slider
         tabsSlider.querySelectorAll('.emby-tab-button').forEach(tab => {
           tab.classList.remove('emby-tab-button-active');
         });
         ratingsTab.classList.add('emby-tab-button-active');
 
-        // Hide all other tab content panels inside #indexPage
-        const indexPage = document.querySelector('#indexPage');
-        if (indexPage) {
-          indexPage.querySelectorAll('.pageTabContent').forEach(panel => {
+        // Hide all tab content panels inside the SAME indexPage
+        // (use the parent of our content panel to be safe)
+        const parentPage = ratingsTabContent.parentElement;
+        if (parentPage) {
+          parentPage.querySelectorAll('.pageTabContent').forEach(panel => {
             panel.style.display = 'none';
+            panel.classList.remove('is-active');
             panel.classList.add('hide');
           });
         }
 
         // Show our ratings tab content
         ratingsTabContent.classList.remove('hide');
-        ratingsTabContent.style.display = 'block';
+        ratingsTabContent.classList.add('is-active');
+        ratingsTabContent.style.display = '';
 
-        // Load content
         try {
           await displayRatingsList(ratingsTabContent);
         } catch (error) {
@@ -812,24 +849,24 @@
         }
       });
 
-      // When any OTHER tab is clicked, hide our content panel
+      // When any OTHER tab button in this slider is clicked, hide our content
       tabsSlider.querySelectorAll('.emby-tab-button:not([data-ratings-tab="true"])').forEach(tab => {
         tab.addEventListener('click', function () {
           ratingsTabContent.style.display = 'none';
+          ratingsTabContent.classList.remove('is-active');
           ratingsTabContent.classList.add('hide');
         }, true);
       });
 
       tabsSlider.appendChild(ratingsTab);
-      console.log(`[UserRatings] ✓ Ratings tab button injected with data-index=${ratingsTabIndex}`);
+      console.log(`[UserRatings] ✓ Ratings tab injected into active slider with data-index=${ratingsTabIndex}`);
     } catch (error) {
       console.error('[UserRatings] Tab injection error:', error);
     }
   }
 
   // =========================================================================
-  // displayRatingsList — now accepts the content container as a parameter
-  // instead of creating/finding an orphaned div
+  // displayRatingsList
   // =========================================================================
   async function displayRatingsList(ratingsTabContent) {
     ratingsTabContent.innerHTML = '<div style="padding: 3em 2em; text-align: center; color: rgba(255,255,255,0.6);">Loading ratings...</div>';
@@ -850,7 +887,6 @@
         return;
       }
 
-      // Concurrency-limited item detail fetching
       const itemsWithDetails = await fetchWithConcurrency(
         items,
         async (item) => {
@@ -1001,18 +1037,18 @@
   }
 
   // =========================================================================
-  // Single unified MutationObserver + navigation handling
+  // Navigation & observer
   // =========================================================================
   function cleanupOnNavigate() {
     const oldUI = document.getElementById('user-ratings-ui');
     if (oldUI) oldUI.remove();
 
-    // Hide the ratings tab content panel (don't remove it — it lives in #indexPage)
-    const ratingsTabContent = document.querySelector('#ratingsTab');
-    if (ratingsTabContent) {
-      ratingsTabContent.style.display = 'none';
-      ratingsTabContent.classList.add('hide');
-    }
+    // Hide all ratingsTab content panels (there may be one in each cached indexPage)
+    document.querySelectorAll('#ratingsTab').forEach(el => {
+      el.style.display = 'none';
+      el.classList.add('hide');
+      el.classList.remove('is-active');
+    });
 
     isInjecting = false;
     injectionAttempts = 0;
@@ -1052,8 +1088,9 @@
           return;
         }
 
-        if (cl.contains('emby-tabs-slider') &&
-          !document.querySelector('[data-ratings-tab="true"]')) {
+        // Tabs slider appeared OR an indexPage appeared — try tab injection
+        if ((cl.contains('emby-tabs-slider') || cl.contains('homePage')) &&
+          !document.querySelector('.emby-tabs-slider [data-ratings-tab="true"]')) {
           scheduleTabInjection(100);
           return;
         }
